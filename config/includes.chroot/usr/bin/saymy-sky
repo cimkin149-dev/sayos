@@ -1,0 +1,43 @@
+#!/bin/sh
+# SayMy Sky: the desktop follows the sky. Wallpaper changes with the hour.
+#   saymy-sky            run forever (started by the session)
+#   saymy-sky --phase    print the current phase and exit
+# FAKE_HOUR=17 saymy-sky --phase   (for testing)
+SHARE="${SAYMY_SHARE:-/usr/share/saymy}"
+
+phase() {
+    h="${FAKE_HOUR:-$(date +%H)}"
+    h="$(printf '%s' "$h" | sed 's/^0*//')"
+    h="${h:-0}"
+    if   [ "$h" -ge 5 ]  && [ "$h" -lt 8 ];  then echo sunrise
+    elif [ "$h" -ge 8 ]  && [ "$h" -lt 17 ]; then echo day
+    elif [ "$h" -ge 17 ] && [ "$h" -lt 20 ]; then echo dusk
+    else echo night
+    fi
+}
+
+accent() {
+    case "$1" in
+        sunrise) echo "#FF8A1F" ;;
+        day)     echo "#F5B93A" ;;
+        dusk)    echo "#FF6B3D" ;;
+        *)       echo "#FF8A1F" ;;
+    esac
+}
+
+if [ "$1" = "--phase" ]; then phase; exit 0; fi
+
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/saymy"
+mkdir -p "$cache"
+current=""
+while :; do
+    p="$(phase)"
+    if [ "$p" != "$current" ]; then
+        current="$p"
+        accent "$p" > "$cache/accent"
+        echo "$p" > "$cache/phase"
+        pkill -x swaybg 2>/dev/null
+        swaybg -i "$SHARE/wallpapers/saymy-$p.jpg" -m fill >/dev/null 2>&1 &
+    fi
+    sleep 300
+done

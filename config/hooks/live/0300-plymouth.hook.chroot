@@ -1,0 +1,8 @@
+#!/bin/sh
+# Boot splash. -R rebuilds the initramfs so the splash is inside it.
+set -e
+if [ ! -d /usr/share/plymouth/themes/saymy ]; then
+    echo "SayMy plymouth theme not found, skipping boot splash"
+    exit 0
+fi
+plymouth-set-default-theme -R saymy || { plymouth-set-default-theme saymy; update-initramfs -u; }

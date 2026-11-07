@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Say Bar
+Comment=Tell your computer what to do
+Exec=saymy-say
+Icon=saymy
+Categories=Utility;

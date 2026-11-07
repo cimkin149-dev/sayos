@@ -1,0 +1,8 @@
+#!/bin/sh
+# Turn on the graphical login, networking and the power-cut guard.
+set -e
+systemctl enable sddm.service || true
+systemctl enable NetworkManager.service || true
+systemctl disable NetworkManager-wait-online.service || true
+systemctl --global enable saymy-power.service || true
+systemctl set-default graphical.target || true

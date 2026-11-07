@@ -1,0 +1,106 @@
+# SayMy OS package list (Debian 13 "trixie"). One package per line.
+# If the build stops with "Unable to locate package X", delete that line and rebuild.
+
+# --- base tools
+sudo
+curl
+wget
+git
+nano
+htop
+unzip
+zip
+rsync
+python3
+usbutils
+pciutils
+ntfs-3g
+exfatprogs
+dosfstools
+bash-completion
+xdg-user-dirs
+xdg-utils
+libnotify-bin
+libgtk-3-bin
+locales
+console-setup
+keyboard-configuration
+
+# --- firmware (so Wi-Fi, graphics and CPUs work on real laptops)
+firmware-linux
+firmware-iwlwifi
+firmware-realtek
+firmware-atheros
+firmware-brcm80211
+firmware-misc-nonfree
+firmware-amd-graphics
+intel-microcode
+amd64-microcode
+
+# --- network, bluetooth, audio, power
+network-manager
+wpasupplicant
+bluez
+pipewire-audio
+wireplumber
+pavucontrol
+upower
+power-profiles-daemon
+brightnessctl
+
+# --- login screen and Wayland session
+sddm
+xserver-xorg
+xwayland
+dbus-user-session
+qt6-wayland
+xdg-desktop-portal-wlr
+xdg-desktop-portal-gtk
+
+# --- SayMy Shell building blocks (Stage 1: labwc + waybar + fuzzel)
+labwc
+waybar
+fuzzel
+swaybg
+swaylock
+swayidle
+mako-notifier
+foot
+grim
+slurp
+wl-clipboard
+wlr-randr
+kanshi
+
+# --- core apps
+firefox-esr
+pcmanfm
+mousepad
+imv
+evince
+gvfs
+gvfs-backends
+udisks2
+udiskie
+cups
+
+# --- look and feel, fonts (Noto = wide script coverage for many languages)
+gnome-themes-extra
+adwaita-icon-theme
+papirus-icon-theme
+fonts-inter
+fonts-noto-core
+fonts-noto-ui-core
+fonts-noto-color-emoji
+fonts-jetbrains-mono
+plymouth
+
+# --- installer
+calamares
+calamares-settings-debian
+grub-efi-amd64-bin
+grub-efi-amd64-signed
+shim-signed
+grub-pc-bin
+efibootmgr
+os-prober

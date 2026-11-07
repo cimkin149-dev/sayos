@@ -1,0 +1,7 @@
+#!/bin/sh
+# Ask running SayMy apps to save right now (used before hibernate / on critical battery).
+# Apps can watch this file (inotify) or poll it, and flush their state when it changes.
+dir="${XDG_RUNTIME_DIR:-/tmp}/saymy"
+mkdir -p "$dir"
+date +%s > "$dir/save-now"
+sync

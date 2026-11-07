@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Language
+Comment=Choose the SayMy language
+Exec=saymy-language
+Icon=preferences-desktop-locale
+Categories=Settings;

@@ -1,0 +1,12 @@
+[Unit]
+Description=SayMy power-cut resilience
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/saymy-power
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

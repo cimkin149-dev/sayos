@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="960"><defs><pattern id="bark" width="96" height="96" patternUnits="userSpaceOnUse">
+  <g fill="none" stroke="#FF8A1F" stroke-opacity="0.9" stroke-width="2">
+    <path d="M48.0 6L90 48.0L48.0 90L6 48.0Z"/>
+    <path d="M48.0 24L72 48.0L48.0 72L24 48.0Z"/>
+    <path d="M0 0L96 0M0 96L96 96"/>
+  </g>
+  <circle cx="48.0" cy="48.0" r="4" fill="#FF8A1F" fill-opacity="1.4400000000000002"/>
+</pattern></defs><rect width="960" height="960" fill="#0C1A2A"/><rect width="960" height="960" fill="url(#bark)"/></svg>

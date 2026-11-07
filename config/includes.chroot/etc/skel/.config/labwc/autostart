@@ -1,0 +1,8 @@
+#!/bin/sh
+# SayMy session startup (labwc runs this once at login)
+saymy-sky &
+mako &
+waybar &
+udiskie --tray --automount &
+swayidle -w timeout 600 'saymy-lock' timeout 900 'systemctl suspend' &
+xdg-user-dirs-update &

@@ -1,0 +1,157 @@
+{
+ "language": "en",
+ "intents": [
+  {
+   "id": "open_app",
+   "patterns": [
+    "open {app}",
+    "launch {app}",
+    "start {app}",
+    "run {app}"
+   ]
+  },
+  {
+   "id": "web_search",
+   "patterns": [
+    "search for {query}",
+    "search {query}",
+    "google {query}",
+    "look up {query}"
+   ]
+  },
+  {
+   "id": "battery",
+   "patterns": [
+    "battery",
+    "battery level",
+    "how much battery",
+    "power level"
+   ]
+  },
+  {
+   "id": "time",
+   "patterns": [
+    "time",
+    "what time is it",
+    "clock"
+   ]
+  },
+  {
+   "id": "date",
+   "patterns": [
+    "date",
+    "what day is it",
+    "today"
+   ]
+  },
+  {
+   "id": "data_used",
+   "patterns": [
+    "data",
+    "data used",
+    "data usage",
+    "how much data"
+   ]
+  },
+  {
+   "id": "lock",
+   "patterns": [
+    "lock",
+    "lock screen",
+    "lock the screen"
+   ]
+  },
+  {
+   "id": "shutdown",
+   "patterns": [
+    "shutdown",
+    "shut down",
+    "power off",
+    "turn off"
+   ]
+  },
+  {
+   "id": "restart",
+   "patterns": [
+    "restart",
+    "reboot"
+   ]
+  },
+  {
+   "id": "sleep",
+   "patterns": [
+    "sleep",
+    "suspend"
+   ]
+  },
+  {
+   "id": "volume_up",
+   "patterns": [
+    "volume up",
+    "louder",
+    "turn it up"
+   ]
+  },
+  {
+   "id": "volume_down",
+   "patterns": [
+    "volume down",
+    "quieter",
+    "turn it down"
+   ]
+  },
+  {
+   "id": "mute",
+   "patterns": [
+    "mute",
+    "silence"
+   ]
+  },
+  {
+   "id": "brightness_up",
+   "patterns": [
+    "brightness up",
+    "brighter"
+   ]
+  },
+  {
+   "id": "brightness_down",
+   "patterns": [
+    "brightness down",
+    "dimmer"
+   ]
+  },
+  {
+   "id": "calculate",
+   "patterns": [
+    "calculate {expr}",
+    "calc {expr}",
+    "what is {expr}",
+    "how much is {expr}"
+   ]
+  },
+  {
+   "id": "language",
+   "patterns": [
+    "language",
+    "change language",
+    "switch language"
+   ]
+  },
+  {
+   "id": "install",
+   "patterns": [
+    "install saymy",
+    "install saymy os",
+    "install the os"
+   ]
+  },
+  {
+   "id": "help",
+   "patterns": [
+    "help",
+    "what can you do"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,26 @@
+{
+ "_meta": {
+  "name": "Kiswahili",
+  "status": "draft-needs-native-review"
+ },
+ "say.prompt": "Sema chochote…",
+ "say.unknown": "Sikuelewa “{text}”. Jaribu “msaada”.",
+ "say.help": "Jaribu: fungua firefox · tafuta hali ya hewa · betri · saa · ongeza sauti · funga skrini · zima · hesabu 12*8",
+ "say.battery": "Betri {pct}% ({state})",
+ "say.battery.none": "Betri haipatikani",
+ "say.time": "Saa ni {time}",
+ "say.date": "Leo ni {date}",
+ "say.data": "Data ya leo: {today}",
+ "say.calc": "{expr} = {result}",
+ "say.calc.error": "Siwezi kuhesabu hilo",
+ "say.app.notfound": "Sikupata programu iitwayo “{app}”",
+ "say.done": "Tayari",
+ "power.cut": "Umeme umekatika",
+ "power.cut.body": "Kazi yako imelindwa. Hali ya kuokoa nishati imewashwa.",
+ "power.back": "Umeme umerudi",
+ "power.low": "Betri iko chini ({pct}%)",
+ "power.critical": "Betri iko hatarini ({pct}%). Ninahifadhi kazi yako.",
+ "data.today": "Leo",
+ "lang.title": "Chagua lugha",
+ "lang.changed": "Lugha imewekwa kuwa {name}"
+}

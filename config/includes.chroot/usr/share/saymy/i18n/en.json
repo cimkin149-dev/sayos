@@ -1,0 +1,26 @@
+{
+ "_meta": {
+  "name": "English",
+  "status": "complete"
+ },
+ "say.prompt": "Say it…",
+ "say.unknown": "I didn’t understand “{text}”. Try “help”.",
+ "say.help": "Try: open firefox · search weather · battery · time · volume up · lock · shut down · calculate 12*8",
+ "say.battery": "Battery {pct}% ({state})",
+ "say.battery.none": "No battery found",
+ "say.time": "It is {time}",
+ "say.date": "Today is {date}",
+ "say.data": "Data today: {today}",
+ "say.calc": "{expr} = {result}",
+ "say.calc.error": "I can’t calculate that",
+ "say.app.notfound": "I couldn’t find an app called “{app}”",
+ "say.done": "Done",
+ "power.cut": "Power cut detected",
+ "power.cut.body": "Your session is protected. Power saver is on.",
+ "power.back": "Power is back",
+ "power.low": "Battery low ({pct}%)",
+ "power.critical": "Battery critical ({pct}%). Saving your work.",
+ "data.today": "Today",
+ "lang.title": "Choose language",
+ "lang.changed": "Language set to {name}"
+}

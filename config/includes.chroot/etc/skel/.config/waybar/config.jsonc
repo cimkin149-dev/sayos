@@ -1,0 +1,32 @@
+{
+  "layer": "top",
+  "position": "bottom",
+  "height": 46,
+  "margin": "0 12 10 12",
+  "spacing": 8,
+  "modules-left": ["image#say", "custom/sayhint"],
+  "modules-center": ["wlr/taskbar"],
+  "modules-right": ["custom/data", "pulseaudio", "network", "battery", "clock", "tray"],
+
+  "image#say": { "path": "/usr/share/saymy/brand/saymy-mark.png", "size": 30, "on-click": "saymy-say", "tooltip": false },
+  "custom/sayhint": { "format": "Say it…", "on-click": "saymy-say", "tooltip": false },
+
+  "wlr/taskbar": { "format": "{icon}", "icon-size": 22, "tooltip-format": "{title}", "on-click": "activate", "on-click-middle": "close" },
+
+  "custom/data": { "exec": "saymy-data waybar", "return-type": "json", "interval": 30 },
+
+  "pulseaudio": {
+    "format": "♪ {volume}%", "format-muted": "♪ muted",
+    "on-click": "pavucontrol", "scroll-step": 5
+  },
+  "network": {
+    "format-wifi": "{essid}", "format-ethernet": "LAN", "format-disconnected": "offline",
+    "tooltip-format": "{ifname}  {ipaddr}", "on-click": "foot -e nmtui"
+  },
+  "battery": {
+    "states": { "warning": 25, "critical": 10 },
+    "format": "{capacity}%", "format-charging": "⚡ {capacity}%", "format-plugged": "⚡ {capacity}%"
+  },
+  "clock": { "format": "{:%H:%M}", "tooltip-format": "{:%A, %d %B %Y}" },
+  "tray": { "icon-size": 20, "spacing": 8 }
+}

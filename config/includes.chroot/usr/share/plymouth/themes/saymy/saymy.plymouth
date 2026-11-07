@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=SayMy
+Description=SayMy OS boot splash: the sun rises behind the speech bubble
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/saymy
+ScriptFile=/usr/share/plymouth/themes/saymy/saymy.script

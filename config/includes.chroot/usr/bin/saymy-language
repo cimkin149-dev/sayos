@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""Pick the SayMy language (Say Bar, notifications, SayMy apps)."""
+import os, subprocess, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_i18n as i18n
+
+langs = i18n.available_languages()
+menu = "\n".join(f"{name}  ({code})" for code, name in langs.items())
+choice = subprocess.run(["fuzzel", "--dmenu", "--prompt", i18n.t("lang.title") + " "],
+                        input=menu, capture_output=True, text=True).stdout.strip()
+if not choice:
+    sys.exit(0)
+code = choice.rsplit("(", 1)[-1].rstrip(")")
+if code in langs:
+    cfg = i18n.config_dir()
+    cfg.mkdir(parents=True, exist_ok=True)
+    (cfg / "lang").write_text(code)
+    subprocess.run(["notify-send", "-a", "SayMy", "-i", "saymy", i18n.t("lang.changed", code, name=langs[code])])

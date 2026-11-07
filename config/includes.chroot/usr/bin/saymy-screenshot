@@ -1,0 +1,7 @@
+#!/bin/sh
+# Select an area, save to ~/Pictures/Screenshots, and copy to the clipboard.
+dir="$HOME/Pictures/Screenshots"
+mkdir -p "$dir"
+file="$dir/saymy-$(date +%Y%m%d-%H%M%S).png"
+region="$(slurp)" || exit 0
+grim -g "$region" "$file" && wl-copy < "$file" && notify-send -a SayMy -i "$file" "Screenshot saved" "$file"

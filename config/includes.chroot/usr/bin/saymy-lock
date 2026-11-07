@@ -1,0 +1,3 @@
+#!/bin/sh
+exec swaylock -f -c 0C1A2A --inside-color 14283C --ring-color FF8A1F --key-hl-color F5B93A \
+    --text-color F3E9D8 --line-color 00000000 -i /usr/share/saymy/wallpapers/saymy-night.jpg -s fill

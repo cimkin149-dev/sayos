@@ -1,0 +1,45 @@
+#!/bin/sh
+# Identity: os-release, hostname, locales, installer branding. Runs inside the image build.
+set -e
+
+cat > /usr/lib/os-release <<'EOF'
+PRETTY_NAME="SayMy OS 0.1 (Dawn)"
+NAME="SayMy OS"
+VERSION_ID="0.1"
+VERSION="0.1 (Dawn)"
+VERSION_CODENAME=trixie
+ID=saymy
+ID_LIKE=debian
+SAYMY_CODENAME=Dawn
+HOME_URL="https://github.com/StevenSsemambo/"
+SUPPORT_URL="https://github.com/StevenSsemambo/"
+BUG_REPORT_URL="https://github.com/StevenSsemambo/"
+EOF
+
+echo saymy > /etc/hostname
+
+# Locales: English plus the first translation targets (more are added in Stage 2).
+for l in en_US en_GB sw_KE sw_TZ lg_UG fr_FR pt_BR es_ES ar_EG hi_IN; do
+    sed -i "s/^# *${l}.UTF-8 UTF-8/${l}.UTF-8 UTF-8/" /etc/locale.gen
+done
+locale-gen
+echo 'LANG=en_US.UTF-8' > /etc/default/locale
+
+# Installer: use SayMy branding and hide Debian's launcher (ours is saymy-install).
+if [ -f /etc/calamares/settings.conf ]; then
+    sed -i 's/^branding:.*/branding: saymy/' /etc/calamares/settings.conf
+fi
+rm -f /usr/share/applications/install-debian.desktop /usr/share/applications/calamares.desktop
+
+# Bootloader name on installed systems.
+if [ -f /etc/default/grub ]; then
+    sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="SayMy OS"/' /etc/default/grub
+    grep -q '^GRUB_DISTRIBUTOR' /etc/default/grub || echo 'GRUB_DISTRIBUTOR="SayMy OS"' >> /etc/default/grub
+    sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet splash"/' /etc/default/grub
+fi
+
+# File modes (some build hosts drop the executable bit).
+chmod 0755 /usr/bin/saymy-* /lib/live/config/9990-saymy 2>/dev/null || true
+chmod 0755 /etc/skel/.config/labwc/autostart 2>/dev/null || true
+
+gtk-update-icon-cache -f -t /usr/share/icons/hicolor 2>/dev/null || true

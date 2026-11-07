@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Install SayMy OS
+Comment=Install SayMy OS to this computer
+Exec=saymy-install
+Icon=saymy
+Categories=System;

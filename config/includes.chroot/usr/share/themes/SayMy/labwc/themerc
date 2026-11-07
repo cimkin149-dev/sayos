@@ -1,0 +1,20 @@
+# SayMy labwc theme (generated from design/tokens/tokens.json values)
+border.width: 2
+padding.height: 6
+window.titlebar.padding.width: 10
+window.active.border.color: #FF8A1F
+window.inactive.border.color: #1E3A55
+window.active.title.bg.color: #14283C
+window.inactive.title.bg.color: #0C1A2A
+window.active.label.text.color: #F3E9D8
+window.inactive.label.text.color: #9FB3C8
+window.active.button.unpressed.image.color: #F3E9D8
+window.inactive.button.unpressed.image.color: #9FB3C8
+menu.items.bg.color: #14283C
+menu.items.text.color: #F3E9D8
+menu.items.active.bg.color: #FF8A1F
+menu.items.active.text.color: #0C1A2A
+menu.separator.color: #1E3A55
+osd.bg.color: #14283C
+osd.border.color: #FF8A1F
+osd.label.text.color: #F3E9D8

@@ -1,0 +1,37 @@
+desktop-image: "background.png"
+title-text: ""
+terminal-font: "Unifont Regular 16"
+terminal-left: "0"
+terminal-top: "0"
+terminal-width: "100%"
+terminal-height: "100%"
+terminal-border: "0"
+
++ boot_menu {
+    left = 30%
+    top = 42%
+    width = 40%
+    height = 38%
+    item_font = "Unifont Regular 16"
+    item_color = "#F3E9D8"
+    selected_item_font = "Unifont Regular 16"
+    selected_item_color = "#FF8A1F"
+    icon_width = 0
+    icon_height = 0
+    item_height = 32
+    item_padding = 6
+    item_spacing = 6
+    scrollbar = true
+    scrollbar_width = 8
+    scrollbar_thumb = "#FF8A1F"
+}
+
++ label {
+    top = 90%
+    left = 0
+    width = 100%
+    align = "center"
+    font = "Unifont Regular 16"
+    color = "#9FB3C8"
+    text = "Use the arrow keys to choose, Enter to start, e to edit"
+}

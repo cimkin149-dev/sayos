@@ -1,0 +1,122 @@
+{
+ "language": "sw",
+ "intents": [
+  {
+   "id": "open_app",
+   "patterns": [
+    "fungua {app}",
+    "anzisha {app}",
+    "washa {app}"
+   ]
+  },
+  {
+   "id": "web_search",
+   "patterns": [
+    "tafuta {query}"
+   ]
+  },
+  {
+   "id": "battery",
+   "patterns": [
+    "betri",
+    "kiwango cha betri"
+   ]
+  },
+  {
+   "id": "time",
+   "patterns": [
+    "saa",
+    "saa ngapi"
+   ]
+  },
+  {
+   "id": "date",
+   "patterns": [
+    "tarehe",
+    "leo ni tarehe ngapi"
+   ]
+  },
+  {
+   "id": "data_used",
+   "patterns": [
+    "data",
+    "matumizi ya data"
+   ]
+  },
+  {
+   "id": "lock",
+   "patterns": [
+    "funga skrini"
+   ]
+  },
+  {
+   "id": "shutdown",
+   "patterns": [
+    "zima",
+    "zima kompyuta"
+   ]
+  },
+  {
+   "id": "restart",
+   "patterns": [
+    "anzisha upya",
+    "washa upya"
+   ]
+  },
+  {
+   "id": "volume_up",
+   "patterns": [
+    "ongeza sauti"
+   ]
+  },
+  {
+   "id": "volume_down",
+   "patterns": [
+    "punguza sauti"
+   ]
+  },
+  {
+   "id": "mute",
+   "patterns": [
+    "nyamazisha"
+   ]
+  },
+  {
+   "id": "brightness_up",
+   "patterns": [
+    "ongeza mwangaza"
+   ]
+  },
+  {
+   "id": "brightness_down",
+   "patterns": [
+    "punguza mwangaza"
+   ]
+  },
+  {
+   "id": "calculate",
+   "patterns": [
+    "hesabu {expr}"
+   ]
+  },
+  {
+   "id": "language",
+   "patterns": [
+    "lugha",
+    "badilisha lugha"
+   ]
+  },
+  {
+   "id": "install",
+   "patterns": [
+    "sakinisha saymy"
+   ]
+  },
+  {
+   "id": "help",
+   "patterns": [
+    "msaada"
+   ]
+  }
+ ]
+}

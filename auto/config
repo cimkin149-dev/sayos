@@ -1,0 +1,20 @@
+#!/bin/sh
+# SayMy OS image configuration for Debian live-build (Debian 13 "trixie").
+set -e
+
+lb config noauto \
+    --distribution trixie \
+    --architectures amd64 \
+    --archive-areas "main contrib non-free non-free-firmware" \
+    --binary-image iso-hybrid \
+    --bootloaders "syslinux,grub-efi" \
+    --debian-installer none \
+    --linux-flavours amd64 \
+    --iso-application "SayMy OS" \
+    --iso-publisher "SayMyTech Developers" \
+    --iso-volume "SAYMY_OS" \
+    --image-name "saymy-os" \
+    --memtest none \
+    --win32-loader false \
+    --bootappend-live "boot=live components quiet splash username=user locales=en_US.UTF-8 keyboard-layouts=us" \
+    "${@}"

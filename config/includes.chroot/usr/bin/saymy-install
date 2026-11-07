@@ -1,0 +1,4 @@
+#!/bin/sh
+# Launch the SayMy OS installer (Calamares) from the live session.
+export QT_QPA_PLATFORM=wayland
+exec sudo -E calamares

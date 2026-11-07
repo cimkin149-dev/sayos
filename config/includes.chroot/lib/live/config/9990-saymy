@@ -1,0 +1,44 @@
+#!/bin/sh
+## live-config(7) - System Configuration Components
+## SayMy OS: auto-login the live user into the labwc session, and let the
+## installer (Calamares) run with sudo. Runs only when booting the live image,
+## so an installed system never inherits any of this.
+
+. /lib/live/config.sh
+
+Cmdline ()
+{
+	:
+}
+
+Init ()
+{
+	echo -n " saymy"
+}
+
+Config ()
+{
+	if [ -e /var/lib/live/config/saymy ]; then
+		exit 0
+	fi
+
+	USER_NAME="${LIVE_USERNAME:-user}"
+
+	mkdir -p /etc/sddm.conf.d
+	cat > /etc/sddm.conf.d/zz-saymy-live.conf <<EOF
+[Autologin]
+User=${USER_NAME}
+Session=labwc.desktop
+Relogin=false
+EOF
+
+	mkdir -p /etc/sudoers.d
+	echo "${USER_NAME} ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/saymy-live
+	chmod 0440 /etc/sudoers.d/saymy-live
+
+	touch /var/lib/live/config/saymy
+}
+
+Cmdline
+Init
+Config
