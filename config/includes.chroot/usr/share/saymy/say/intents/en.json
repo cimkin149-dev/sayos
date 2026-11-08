@@ -152,6 +152,39 @@
     "help",
     "what can you do"
    ]
+  },
+  {
+   "id": "space_study",
+   "patterns": [
+    "study mode",
+    "study space",
+    "switch to study",
+    "start studying"
+   ]
+  },
+  {
+   "id": "space_business",
+   "patterns": [
+    "business mode",
+    "business space",
+    "switch to business"
+   ]
+  },
+  {
+   "id": "space_home",
+   "patterns": [
+    "home mode",
+    "home space",
+    "switch to home"
+   ]
+  },
+  {
+   "id": "space_developer",
+   "patterns": [
+    "developer mode",
+    "developer space",
+    "switch to developer"
+   ]
   }
  ]
 }

@@ -285,6 +285,52 @@ class SettingsBackend(unittest.TestCase):
             del os.environ["SAYMY_DEMO"]
 
 
+class SpacesAndWelcome(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["XDG_CONFIG_HOME"] = self.tmp + "/cfg"
+        os.environ["XDG_DATA_HOME"] = self.tmp + "/data"
+        self.home = Path(self.tmp) / "home"
+        (self.home / ".config/mako").mkdir(parents=True)
+        (self.home / ".config/mako/config").write_text("border-color=#FF8A1F\n")
+
+    def tearDown(self):
+        del os.environ["XDG_CONFIG_HOME"], os.environ["XDG_DATA_HOME"]
+
+    def test_apply_space(self):
+        r = sb.apply_space("Study", home=self.home, reload=False)
+        self.assertEqual((r["space"], r["dnd"], r["accent"]), ("Study", True, "#2F8FD1"))
+        self.assertEqual(sb.current_space(), "Study")
+        self.assertIn("#2F8FD1", (self.home / ".config/mako/config").read_text())
+        self.assertFalse(sb.load_appearance()["follow_sky"])
+        with self.assertRaises(ValueError):
+            sb.apply_space("Nonsense", home=self.home, reload=False)
+
+    def test_say_bar_space_intents(self):
+        for phrase, space in (("study mode", "Study"), ("business space", "Business"), ("switch to developer", "Developer")):
+            self.assertEqual(say.handle(phrase, "en").exec, ["saymy-space", space])
+
+    def test_apply_welcome(self):
+        os.environ["HOME"] = str(self.home)
+        try:
+            done = sb.apply_welcome({"lang": "sw", "price": "5000", "cur": "ugx", "space": "Business",
+                                     "accent": "#3FA66B", "follow": True}, reload=False)
+        finally:
+            pass
+        self.assertEqual(done["lang"], "sw")
+        self.assertEqual(done["space"], "Business")
+        self.assertEqual(done["accent"], "#3FA66B")
+        self.assertTrue(done["follow_sky"])
+        self.assertTrue(sb.welcome_marker().exists())
+        self.assertEqual((Path(self.tmp) / "cfg/saymy/lang").read_text(), "sw")
+        self.assertEqual(data.price()["currency"], "UGX")
+
+    def test_welcome_skips_bad_price_and_default_accent(self):
+        done = sb.apply_welcome({"lang": "en", "price": "abc", "cur": "", "space": "Home", "accent": None, "follow": False}, reload=False)
+        self.assertNotIn("price", done)
+        self.assertNotIn("accent", done)
+
+
 class Sky(unittest.TestCase):
     def phase(self, hour):
         env = dict(os.environ, FAKE_HOUR=str(hour))

@@ -11,5 +11,10 @@ for p in Network Display Sound Power Appearance Language "Data & Money" About; d
   xvfb-run -a -s "-screen 0 1000x640x24" bash -c "SAYMY_START_PANEL='$p' python3 config/includes.chroot/usr/bin/saymy-settings --demo >'$log' 2>&1 & pid=\$!; sleep 4; kill -0 \$pid && import -window root '/tmp/saymy-shots/${p// /_}.png'; kill \$pid" || fail=1
   grep -q Traceback "$log" && { echo "FAIL panel $p"; cat "$log"; fail=1; }
 done
+for n in 0 1 2 3 4; do
+  log="$(mktemp)"
+  xvfb-run -a -s "-screen 0 1000x640x24" bash -c "SAYMY_START_PAGE=$n python3 config/includes.chroot/usr/bin/saymy-welcome --demo >'$log' 2>&1 & pid=\$!; sleep 4; kill -0 \$pid && import -window root /tmp/saymy-shots/welcome$n.png; kill \$pid" || fail=1
+  grep -q Traceback "$log" && { echo "FAIL welcome page $n"; cat "$log"; fail=1; }
+done
 [ "$fail" -eq 0 ] && echo "GUI SMOKE OK: screenshots in /tmp/saymy-shots" || echo "GUI SMOKE FAILED"
 exit "$fail"

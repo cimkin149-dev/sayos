@@ -20,6 +20,8 @@ what has and has not been tested.
 | **Power-cut guard** | Detects mains loss, switches to power saver, dims the screen, warns, saves, suspends or hibernates at low battery, and keeps a diary of every cut |
 | **Data wallet** | Panel counter of data used today; shows cost once you set your price (`saymy-data set-price 5000 UGX`). No currency is assumed |
 | **SayMy Settings** (`Super+,`) | A real GTK app: Wi-Fi, brightness, volume, power mode, Power Diary, accent colour that recolours the whole desktop (and can follow the sky), language, data price, About |
+| **Welcome app** | Runs once at first login: language, data price, Space, accent colour. Run it again any time with `saymy-welcome` |
+| **Spaces** | `saymy-space Study` (or say “study mode”): recolours the desktop and, for Study, mutes notifications through mako |
 | **Installer** | Calamares with SayMy branding and slideshow |
 | **Language groundwork** | Translation catalogs, 10 locales generated, Noto fonts for wide script coverage, community-friendly JSON files |
 | **Design system** | Tokens, logo, bark-cloth pattern, four wallpapers, all regenerated from code (`design/generate_assets.py`) |

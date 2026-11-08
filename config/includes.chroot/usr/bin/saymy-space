@@ -1,0 +1,16 @@
+#!/usr/bin/env python3
+"""saymy-space <Study|Business|Home|Developer>   or   saymy-space (shows the current Space)"""
+import os, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_settings_backend as be
+
+if len(sys.argv) == 1:
+    print(be.current_space())
+    sys.exit(0)
+try:
+    r = be.apply_space(sys.argv[1].capitalize())
+except ValueError as exc:
+    print(exc, file=sys.stderr)
+    sys.exit(1)
+print(f"{r['space']} space: accent {r['accent']}, notifications {'muted' if r['dnd'] else 'on'}")
+os.system(f"notify-send -a SayMy -i saymy '{r['space']} space' '{be.SPACES[r['space']]['tip']}' 2>/dev/null")

@@ -12,3 +12,6 @@ width=360
 [urgency=critical]
 border-color=#E0445B
 default-timeout=0
+
+[mode=dnd]
+invisible=1

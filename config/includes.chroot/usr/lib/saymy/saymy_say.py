@@ -233,6 +233,8 @@ SIMPLE = {
     "mute": ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"],
     "brightness_up": ["brightnessctl", "set", "5%+"],
     "brightness_down": ["brightnessctl", "set", "5%-"],
+    "space_study": ["saymy-space", "Study"], "space_business": ["saymy-space", "Business"],
+    "space_home": ["saymy-space", "Home"], "space_developer": ["saymy-space", "Developer"],
     "language": ["saymy-language"],
     "install": ["saymy-install"],
 }

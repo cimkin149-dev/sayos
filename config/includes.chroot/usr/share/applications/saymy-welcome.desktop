@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to SayMy OS
+Comment=Set language, data price, Space and accent
+Exec=saymy-welcome
+Icon=saymy
+Categories=Settings;

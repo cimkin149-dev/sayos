@@ -240,6 +240,67 @@ def apply_accent(new_hex: str, home: Path = None, reload: bool = True) -> list:
     return changed
 
 
+# ------------------------------------------------------------------ spaces
+SPACES = {
+    "Study": {"accent": "#2F8FD1", "dnd": True, "tip": "Notifications muted. Learning tools first."},
+    "Business": {"accent": "#F5B93A", "dnd": False, "tip": "Calculator, files and Packs first."},
+    "Home": {"accent": "#FF8A1F", "dnd": False, "tip": "Relaxed. Everything in reach."},
+    "Developer": {"accent": "#3FA66B", "dnd": False, "tip": "Terminal and tools first."},
+}
+
+
+def current_space() -> str:
+    return load_appearance().get("space", "Home")
+
+
+def apply_space(name: str, home: Path = None, reload: bool = True) -> dict:
+    """Switch Space: recolour the desktop and set notification mode (Study mutes via mako's dnd mode)."""
+    if name not in SPACES:
+        raise ValueError(f"unknown space {name!r}; choose from {', '.join(SPACES)}")
+    s = SPACES[name]
+    changed = apply_accent(s["accent"], home=home, reload=reload)
+    cfg = load_appearance()
+    cfg["follow_sky"] = False
+    cfg["space"] = name
+    save_appearance(cfg)
+    if reload and not demo():
+        run(["makoctl", "mode", "-s", "dnd" if s["dnd"] else "default"])
+    return {"space": name, "accent": s["accent"], "dnd": s["dnd"], "files": len(changed)}
+
+
+def welcome_marker() -> Path:
+    return i18n.config_dir() / "welcome-done"
+
+
+def apply_welcome(state: dict, reload: bool = True) -> dict:
+    """Write everything chosen in the Welcome app. Returns what was applied."""
+    done = {}
+    d = i18n.config_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "lang").write_text(state["lang"])
+    done["lang"] = state["lang"]
+    try:
+        per_gb = float(state.get("price") or 0)
+        if per_gb > 0:
+            import saymy_data
+            saymy_data.set_price(per_gb, state.get("cur") or "")
+            done["price"] = per_gb
+    except ValueError:
+        pass
+    apply_space(state["space"], reload=reload)
+    done["space"] = state["space"]
+    chosen = state.get("accent")
+    if chosen and chosen.upper() != SPACES[state["space"]]["accent"].upper():
+        apply_accent(chosen, reload=reload)
+        done["accent"] = chosen.upper()
+    cfg = load_appearance()
+    cfg["follow_sky"] = bool(state.get("follow"))
+    save_appearance(cfg)
+    done["follow_sky"] = cfg["follow_sky"]
+    welcome_marker().write_text("done")
+    return done
+
+
 # ------------------------------------------------------------------ about
 def system_info() -> dict:
     info = {"os": "SayMy OS", "kernel": os.uname().release, "cpu": "", "ram": "", "disk": ""}

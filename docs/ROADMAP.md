@@ -4,7 +4,7 @@
 data wallet, installer branding, translation groundwork.
 
 **Stage 2: SayMy Shell and settings**
-Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about).
+Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine.
 Next: Users and Updates panels, night light, custom login screen, accent colour that follows
 the sky, first-run welcome, Modes (Study, Business, Home, Developer), screenshots-driven polish.
 

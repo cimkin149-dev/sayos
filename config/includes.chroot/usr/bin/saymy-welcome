@@ -1,0 +1,175 @@
+#!/usr/bin/env python3
+"""Welcome to SayMy OS: language, data price, Space, accent. Runs once at first login.
+
+   saymy-welcome --first-run   exits at once if setup was already done (used by the session autostart)
+   saymy-welcome               run it again any time
+   --demo                      sample data, for screenshots
+"""
+import os
+import sys
+
+if "--demo" in sys.argv:
+    os.environ["SAYMY_DEMO"] = "1"
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+
+import saymy_i18n as i18n                # noqa: E402
+import saymy_settings_backend as be      # noqa: E402
+
+if "--first-run" in sys.argv and be.welcome_marker().exists():
+    sys.exit(0)
+
+import gi                                 # noqa: E402
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, Gtk        # noqa: E402
+
+from saymy_ui import css_for, label, switch   # noqa: E402
+
+PAGES = ["welcome", "data", "space", "accent", "done"]
+
+
+class Welcome(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Welcome to SayMy OS")
+        self.set_default_size(820, 560)
+        self.set_resizable(False)
+        self.state = {"lang": i18n.current_language(), "price": "", "cur": "", "space": "Home",
+                      "accent": None, "follow": False}
+        self.provider = Gtk.CssProvider()
+        css = css_for(be.load_appearance().get("accent", be.DEFAULT_ACCENT))
+        self.provider.load_from_string(css) if hasattr(self.provider, "load_from_string") else self.provider.load_from_data(css.encode())
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self.provider,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.index = int(os.environ.get("SAYMY_START_PAGE", "0"))
+        self.draw()
+
+    # -------------------------------------------------------------- layout
+    def draw(self):
+        page = PAGES[self.index]
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=16)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{m}")(44)
+        getattr(self, f"page_{page}")(box)
+        spacer = Gtk.Box()
+        spacer.set_vexpand(True)
+        box.append(spacer)
+        nav = Gtk.Box(spacing=10)
+        dots = Gtk.Box(spacing=6)
+        dots.set_hexpand(True)
+        for i in range(len(PAGES)):
+            d = Gtk.Label(label="●" if i == self.index else "○")
+            d.add_css_class("dim")
+            dots.append(d)
+        nav.append(dots)
+        back = Gtk.Button(label="Back")
+        back.set_sensitive(self.index > 0)
+        back.connect("clicked", lambda b: self.go(-1))
+        nxt = Gtk.Button(label="Start using SayMy OS" if page == "done" else "Next")
+        nxt.add_css_class("accent")
+        nxt.connect("clicked", lambda b: self.finish() if page == "done" else self.go(1))
+        nav.append(back)
+        nav.append(nxt)
+        box.append(nav)
+        self.set_child(box)
+
+    def go(self, step):
+        self.index = max(0, min(len(PAGES) - 1, self.index + step))
+        self.draw()
+
+    def choice_row(self, options, current, on_pick, sub=None):
+        wrap = Gtk.Box(spacing=10)
+        first = None
+        for key, text in options:
+            b = Gtk.ToggleButton(label=text)
+            b.add_css_class("card-btn")
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
+            b.set_active(key == current)
+            b.connect("toggled", lambda w, k=key: w.get_active() and on_pick(k))
+            wrap.append(b)
+        return wrap
+
+    # -------------------------------------------------------------- pages
+    def page_welcome(self, box):
+        box.append(label("Welcome to SayMy OS", "big"))
+        box.append(label("Born in Africa. Built for the world. Let’s make this computer yours. It takes a minute.", "dim", wrap=True))
+        box.append(label("Choose your language", "rt"))
+        langs = [(c, n) for c, n in i18n.available_languages().items()]
+        box.append(self.choice_row(langs, self.state["lang"], lambda k: self.state.update(lang=k)))
+        box.append(label("Missing words fall back to English. Luganda is waiting for a native speaker to translate it.", "dim", wrap=True))
+
+    def page_data(self, box):
+        box.append(label("Data costs money", "big"))
+        box.append(label("Tell SayMy what one gigabyte costs and it shows your spending in the panel. Nothing is assumed. You can skip this.", "dim", wrap=True))
+        price = Gtk.Entry(placeholder_text="Price per GB, for example 5000")
+        price.set_text(self.state["price"])
+        price.connect("changed", lambda e: self.state.update(price=e.get_text()))
+        cur = Gtk.Entry(placeholder_text="Currency, for example UGX")
+        cur.set_max_length(4)
+        cur.set_text(self.state["cur"])
+        cur.connect("changed", lambda e: self.state.update(cur=e.get_text()))
+        price.set_size_request(360, -1)
+        cur.set_size_request(360, -1)
+        price.set_halign(Gtk.Align.START)
+        cur.set_halign(Gtk.Align.START)
+        box.append(price)
+        box.append(cur)
+
+    def page_space(self, box):
+        box.append(label("How will you use this computer?", "big"))
+        box.append(label("Spaces change the colour, which apps come first, and whether notifications interrupt you. Switch any time with “study mode”, “business mode” and so on in the Say Bar.", "dim", wrap=True))
+        box.append(self.choice_row([(k, k) for k in be.SPACES], self.state["space"], lambda k: (self.state.update(space=k), tip.set_text(be.SPACES[k]["tip"]))))
+        tip = label(be.SPACES[self.state["space"]]["tip"], "rt")
+        box.append(tip)
+
+    def page_accent(self, box):
+        box.append(label("Make it yours", "big"))
+        box.append(label("Pick an accent colour, or let the desktop follow the sky from sunrise to night.", "dim", wrap=True))
+        sw = Gtk.Box(spacing=12)
+        self.sw_buttons = {}
+        start = self.state["accent"] or be.SPACES[self.state["space"]]["accent"]
+        for name, hexv in be.ACCENTS.items():
+            b = Gtk.Button()
+            b.add_css_class("swatch")
+            b.add_css_class(f"sw-{name}")
+            if hexv.upper() == start.upper():
+                b.add_css_class("sel")
+            b.connect("clicked", lambda w, h=hexv: self.pick_accent(h))
+            self.sw_buttons[hexv] = b
+            sw.append(b)
+        box.append(sw)
+        row_ = Gtk.Box(spacing=14)
+        row_.append(label("Follow the sky", "rt"))
+        row_.append(switch(self.state["follow"], lambda on: self.state.update(follow=on)))
+        box.append(row_)
+
+    def pick_accent(self, hexv):
+        self.state["accent"] = hexv
+        for h, b in self.sw_buttons.items():
+            (b.add_css_class if h.upper() == hexv.upper() else b.remove_css_class)("sel")
+
+    def page_done(self, box):
+        box.append(label("You’re all set", "big"))
+        for text in ("Press Super + Space for the Say Bar, then just say what you want.",
+                     "Press Super + , (comma) for Settings.",
+                     "Press Super + A for all your apps.",
+                     "When mains power drops, SayMy protects your session and keeps a diary of every cut."):
+            box.append(label("•  " + text, "rt", wrap=True))
+
+    # -------------------------------------------------------------- finish
+    def finish(self):
+        be.apply_welcome(self.state)
+        self.close()
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.saymy.Welcome")
+
+    def do_activate(self):
+        (self.props.active_window or Welcome(self)).present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run([a for a in sys.argv if a not in ("--demo", "--first-run")]))

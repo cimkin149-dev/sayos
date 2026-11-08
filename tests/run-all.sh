@@ -28,7 +28,7 @@ for f in design/tokens/tokens.json config/includes.chroot/usr/share/saymy/i18n/*
 done
 
 echo "== python"
-python3 -m py_compile config/includes.chroot/usr/lib/saymy/*.py config/includes.chroot/usr/bin/saymy-language config/includes.chroot/usr/bin/saymy-settings config/includes.chroot/usr/bin/saymy-accent || fail=1
+python3 -m py_compile config/includes.chroot/usr/lib/saymy/*.py config/includes.chroot/usr/bin/saymy-language config/includes.chroot/usr/bin/saymy-settings config/includes.chroot/usr/bin/saymy-accent config/includes.chroot/usr/bin/saymy-welcome config/includes.chroot/usr/bin/saymy-space || fail=1
 python3 tests/test_saymy.py || fail=1
 
 echo "== required files"

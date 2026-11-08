@@ -23,6 +23,9 @@ Written plainly so nothing surprises you.
 - **SayMy Settings** was run on a virtual screen with sample data and its parsing and accent logic is unit tested, but it has not yet
   been tried against a real NetworkManager, battery or sound server. Night light, screen timeout and system-wide language are not built yet.
 
+- **Welcome app and Spaces** were run on a virtual screen and unit tested, not yet on a real session. Spaces currently change the accent and
+  notification mode; reordering apps per Space needs the desktop icon layer, which comes later.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).
