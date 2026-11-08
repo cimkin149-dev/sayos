@@ -238,6 +238,7 @@ SIMPLE = {
     "doctor_network": ["saymy-doctor", "--topic", "network"], "doctor_power": ["saymy-doctor", "--topic", "power"],
     "doctor_slow": ["saymy-doctor", "--topic", "slow"], "doctor_all": ["saymy-doctor"],
     "night_on": ["saymy-night", "on"], "night_off": ["saymy-night", "off"],
+    "drop": ["saymy-drop"],
     "language": ["saymy-language"],
     "install": ["saymy-install"],
 }
@@ -287,7 +288,10 @@ def handle(text: str, lang: str = None, intents: dict = None) -> Result:
 
 
 def notify(text: str):
-    subprocess.run(["notify-send", "-a", "Say Bar", "-i", "saymy", "Say Bar", text], check=False)
+    try:
+        subprocess.run(["notify-send", "-a", "Say Bar", "-i", "saymy", "Say Bar", text], check=False)
+    except OSError:
+        pass
 
 
 def run(r: Result):

@@ -34,6 +34,11 @@ entry, passwordentry { background: #0C1A2A; color: #F3E9D8; border-radius: 12px;
 .big { font-size: 36px; font-weight: 800; }
 .card-btn { padding: 14px 20px; border-radius: 16px 16px 16px 4px; }
 .lv-ok { color: #3FA66B; font-weight: 800; font-size: 20px; } .lv-warn { color: #F5B93A; font-weight: 800; font-size: 20px; } .lv-bad { color: #E0445B; font-weight: 800; font-size: 20px; }
+.devices { background: #14283C; border-radius: 14px; }
+.devices row { padding: 4px 6px; color: #F3E9D8; background: transparent; border-radius: 10px; }
+.devices row:selected { background: @ACC@; color: #0C1A2A; }
+progressbar trough { background: #1E3A55; min-height: 8px; border-radius: 999px; }
+progressbar progress { background: @ACC@; min-height: 8px; border-radius: 999px; }
 .swatch { min-width: 40px; min-height: 40px; padding: 0; border-radius: 999px; border: 3px solid transparent; }
 .swatch.sel { border-color: #F3E9D8; }
 """

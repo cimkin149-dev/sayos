@@ -236,6 +236,18 @@
     "night light off",
     "turn off night light"
    ]
+  },
+  {
+   "id": "drop",
+   "patterns": [
+    "send a file",
+    "send file",
+    "share files nearby",
+    "share a file",
+    "receive a file",
+    "receive files",
+    "drop"
+   ]
   }
  ]
 }

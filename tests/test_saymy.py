@@ -25,6 +25,7 @@ import saymy_power as power    # noqa: E402
 import saymy_data as data      # noqa: E402
 import saymy_settings_backend as sb  # noqa: E402
 import saymy_doctor as doc  # noqa: E402
+import saymy_drop as drop  # noqa: E402
 
 
 class SayBar(unittest.TestCase):
@@ -422,6 +423,126 @@ class NightAndIdle(unittest.TestCase):
     def test_say_bar_night_light(self):
         self.assertEqual(say.handle("turn on night light", "en").exec, ["saymy-night", "on"])
         self.assertEqual(say.handle("night light off", "en").exec, ["saymy-night", "off"])
+
+
+class Drop(unittest.TestCase):
+    def setUp(self):
+        os.environ["SAYMY_NO_AVAHI"] = "1"
+        self.dest = Path(tempfile.mkdtemp())
+        self.src = Path(tempfile.mkdtemp())
+        self.srv = drop.DropServer(dest=self.dest, host="127.0.0.1", port=0, code="123456", ttl=0, name="Test PC").start()
+
+    def tearDown(self):
+        self.srv.stop()
+        del os.environ["SAYMY_NO_AVAHI"]
+
+    def make(self, name="notes.txt", data=b"hello from drop"):
+        p = self.src / name
+        p.write_bytes(data)
+        return p
+
+    def test_transfer_roundtrip_with_progress(self):
+        data = os.urandom(300_000)
+        p = self.make("photo.jpg", data)
+        seen = []
+        r = drop.send_file(p, "127.0.0.1", self.srv.port, "123456", progress=lambda a, b: seen.append((a, b)))
+        self.assertEqual(r["saved_as"], "photo.jpg")
+        self.assertEqual((self.dest / "photo.jpg").read_bytes(), data)
+        self.assertEqual(seen[-1], (300_000, 300_000))
+        self.assertEqual(self.srv.received, [self.dest / "photo.jpg"])
+
+    def test_empty_file_and_unicode_name(self):
+        p = self.make("Kampala café.txt", b"")
+        self.assertEqual(drop.send_file(p, "127.0.0.1", self.srv.port, "123456")["saved_as"], "Kampala café.txt")
+
+    def test_wrong_code_rejected_then_locked(self):
+        p = self.make()
+        for _ in range(drop.MAX_FAILURES):
+            with self.assertRaises(drop.DropError) as cm:
+                drop.send_file(p, "127.0.0.1", self.srv.port, "000000")
+            self.assertEqual(cm.exception.status, 403)
+        self.assertTrue(self.srv.locked)
+        with self.assertRaises(drop.DropError) as cm:               # even the right code is refused now
+            drop.send_file(p, "127.0.0.1", self.srv.port, "123456")
+        self.assertEqual(cm.exception.status, 423)
+        self.assertEqual(list(self.dest.iterdir()), [])
+
+    def test_nonce_cannot_be_replayed(self):
+        import http.client
+        p = self.make()
+        info = drop.hello("127.0.0.1", self.srv.port)
+        sha, size = drop.sha256_file(p), p.stat().st_size
+        proof = drop.make_proof("123456", info["nonce"], "notes.txt", size, sha)
+        def post():
+            c = http.client.HTTPConnection("127.0.0.1", self.srv.port)
+            c.request("POST", "/drop", body=p.read_bytes(), headers={"X-Drop-Name": "notes.txt", "X-Drop-Sha256": sha,
+                                                                     "X-Drop-Nonce": info["nonce"], "X-Drop-Proof": proof})
+            return c.getresponse().status
+        self.assertEqual(post(), 200)
+        self.assertEqual(post(), 403)                                # same proof, nonce already used
+
+    def test_damaged_file_is_rejected(self):
+        import http.client
+        info = drop.hello("127.0.0.1", self.srv.port)
+        body = b"actual bytes"
+        claimed = drop.hashlib.sha256(b"different bytes").hexdigest()
+        proof = drop.make_proof("123456", info["nonce"], "x.bin", len(body), claimed)
+        c = http.client.HTTPConnection("127.0.0.1", self.srv.port)
+        c.request("POST", "/drop", body=body, headers={"X-Drop-Name": "x.bin", "X-Drop-Sha256": claimed,
+                                                       "X-Drop-Nonce": info["nonce"], "X-Drop-Proof": proof})
+        self.assertEqual(c.getresponse().status, 422)
+        self.assertEqual([f.name for f in self.dest.iterdir()], [])  # nothing left behind, not even a .part file
+
+    def test_size_limit(self):
+        self.srv.max_bytes = 10
+        with self.assertRaises(drop.DropError) as cm:
+            drop.send_file(self.make(data=b"x" * 100), "127.0.0.1", self.srv.port, "123456")
+        self.assertEqual(cm.exception.status, 413)
+
+    def test_existing_files_are_never_overwritten(self):
+        p = self.make("a.txt", b"one")
+        drop.send_file(p, "127.0.0.1", self.srv.port, "123456")
+        p.write_bytes(b"two")
+        r = drop.send_file(p, "127.0.0.1", self.srv.port, "123456")
+        self.assertEqual(r["saved_as"], "a (1).txt")
+        self.assertEqual((self.dest / "a.txt").read_bytes(), b"one")
+
+    def test_safe_name(self):
+        self.assertEqual(drop.safe_name("../../etc/passwd"), "passwd")
+        self.assertEqual(drop.safe_name("..\\..\\windows\\evil.exe"), "evil.exe")
+        self.assertEqual(drop.safe_name(".bashrc"), "bashrc")
+        self.assertEqual(drop.safe_name("\x00\x01"), "file")
+        self.assertEqual(len(drop.safe_name("a" * 500)), 200)
+
+    def test_unreachable_receiver(self):
+        with self.assertRaises(drop.DropError):
+            drop.hello("127.0.0.1", 1, timeout=1)
+
+    def test_notifications_never_crash_without_notify_send(self):
+        old = os.environ["PATH"]
+        os.environ["PATH"] = "/nonexistent"
+        try:
+            drop.notify("hello", "world")
+            say.notify("hello")
+        finally:
+            os.environ["PATH"] = old
+
+    def test_codes_and_targets(self):
+        for _ in range(50):
+            self.assertRegex(drop.new_code(), r"^\d{6}$")
+        self.assertEqual(drop.parse_target("192.168.1.23"), ("192.168.1.23", drop.PORT))
+        self.assertEqual(drop.parse_target("192.168.1.23:9000"), ("192.168.1.23", 9000))
+
+    def test_parse_avahi(self):
+        text = ("+;wlan0;IPv4;Grace\\039s\\032laptop;_saymydrop._tcp;local\n"
+                "=;wlan0;IPv4;Grace\\032laptop;_saymydrop._tcp;local;grace.local;192.168.1.23;53317;\n"
+                "=;wlan0;IPv6;Grace\\032laptop;_saymydrop._tcp;local;grace.local;fe80::1;53317;\n"
+                "=;eth0;IPv4;Grace\\032laptop;_saymydrop._tcp;local;grace.local;192.168.1.23;53317;\n")
+        self.assertEqual(drop.parse_avahi(text), [{"name": "Grace laptop", "host": "grace.local", "address": "192.168.1.23", "port": 53317}])
+
+    def test_say_bar_drop_intents(self):
+        for phrase in ("send a file", "share files nearby", "drop"):
+            self.assertEqual(say.handle(phrase, "en").exec, ["saymy-drop"])
 
 
 class Sky(unittest.TestCase):

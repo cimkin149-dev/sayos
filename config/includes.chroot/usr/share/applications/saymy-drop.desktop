@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Drop
+GenericName=Nearby File Sharing
+Comment=Send files to a nearby computer, no internet needed
+Exec=saymy-drop
+Icon=document-send
+Categories=Network;Utility;

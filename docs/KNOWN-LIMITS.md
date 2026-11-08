@@ -29,6 +29,10 @@ Written plainly so nothing surprises you.
 - **Doctor, night light and screen timeout**: parsing and decision logic are unit tested and the windows were screenshotted with sample data.
   They have not yet run against a real router, battery or Wayland session. Night light uses `wlsunset`; the timers use `swayidle`.
 
+- **Drop** was tested with real transfers between two processes on one machine (wrong code, replayed proof, damaged file, oversize, name tricks).
+  It has not yet crossed a real Wi-Fi network. Files are **not encrypted in transit** (do not send secrets over public Wi-Fi); pairing-based TLS is planned.
+  Discovery uses Avahi, so a firewall must allow port 53317 on the local network.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).

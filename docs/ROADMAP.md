@@ -4,12 +4,12 @@
 data wallet, installer branding, translation groundwork.
 
 **Stage 2: SayMy Shell and settings**
-Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine, SayMy Doctor, night light, screen timeout.
+Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine, SayMy Doctor, night light, screen timeout, Drop (nearby sharing, v0.1).
 Next: Users and Updates panels, night light, custom login screen, accent colour that follows
 the sky, first-run welcome, Modes (Study, Business, Home, Developer), screenshots-driven polish.
 
 **Stage 3: Apps and Packs**
-Bundle the SayMyTech PWAs as offline apps, Packs installable from USB, SayMy Share (nearby sharing).
+Bundle the SayMyTech PWAs as offline apps, Packs installable from USB, encrypted Drop (pairing-based TLS) and send-to-many.
 
 **Stage 4: Money and voice**
 Payment adapter framework (MoMo and Airtel sandbox first, others by community), offline voice commands

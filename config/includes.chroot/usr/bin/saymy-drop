@@ -1,0 +1,232 @@
+#!/usr/bin/env python3
+"""SayMy Drop: send files to a nearby computer, no internet needed.
+
+   saymy-drop                              open the Drop window
+   saymy-drop receive [--ttl 600]          turn receiving on and print the pairing code
+   saymy-drop send FILE --to HOST --code N send a file
+   saymy-drop find                         list nearby computers
+"""
+import os
+import sys
+import threading
+
+if "--demo" in sys.argv:
+    os.environ["SAYMY_DEMO"] = "1"
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_drop as drop  # noqa: E402
+
+rc = drop.cli([a for a in sys.argv[1:] if a != "--demo"])
+if rc != -1:
+    sys.exit(rc)
+
+import subprocess  # noqa: E402
+
+import gi  # noqa: E402
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+import saymy_settings_backend as be  # noqa: E402
+from saymy_ui import bg, css_for, label  # noqa: E402
+
+
+class DropWindow(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Drop")
+        self.set_default_size(820, 600)
+        prov = Gtk.CssProvider()
+        css = css_for(be.load_appearance().get("accent", be.DEFAULT_ACCENT))
+        prov.load_from_string(css) if hasattr(prov, "load_from_string") else prov.load_from_data(css.encode())
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        self.server = None
+        self.file = None
+        self.device = None
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(outer, f"set_margin_{m}")(32)
+        outer.append(label("Drop", "title"))
+        outer.append(label("Send files to a nearby computer. No internet needed.", "dim"))
+        tabs = Gtk.Box(spacing=8)
+        self.stack = Gtk.Stack()
+        self.tab_buttons = {}
+        first = None
+        for name in ("Send", "Receive"):
+            b = Gtk.ToggleButton(label=name)
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
+            b.connect("toggled", lambda w, n=name: w.get_active() and self.stack.set_visible_child_name(n))
+            tabs.append(b)
+            self.tab_buttons[name] = b
+        outer.append(tabs)
+        self.stack.add_named(self.send_page(), "Send")
+        self.stack.add_named(self.receive_page(), "Receive")
+        outer.append(self.stack)
+        self.set_child(outer)
+        start = os.environ.get("SAYMY_START_PAGE", "Send")
+        self.tab_buttons[start].set_active(True)
+        self.stack.set_visible_child_name(start)
+        if os.environ.get("SAYMY_DEMO_ON") and be.demo():
+            self.toggle_receive(None)
+
+    # ------------------------------------------------------------ send
+    def send_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        self.file_label = label("No file chosen", "dim")
+        choose = Gtk.Button(label="Choose a file…")
+        choose.connect("clicked", self.choose_file)
+        r = Gtk.Box(spacing=12)
+        r.add_css_class("row")
+        r.append(choose)
+        r.append(self.file_label)
+        box.append(r)
+        head = Gtk.Box(spacing=10)
+        head.append(label("Nearby computers", "rt"))
+        refresh = Gtk.Button(label="Refresh")
+        refresh.connect("clicked", lambda b: self.find())
+        head.append(refresh)
+        box.append(head)
+        self.devices = Gtk.ListBox()
+        self.devices.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.devices.connect("row-selected", self.pick_device)
+        self.devices.add_css_class("devices")
+        box.append(self.devices)
+        self.manual = Gtk.Entry(placeholder_text="Or type an address, for example 192.168.1.23")
+        box.append(self.manual)
+        self.code = Gtk.Entry(placeholder_text="6 digit code shown on the other computer")
+        self.code.set_max_length(6)
+        box.append(self.code)
+        self.send_btn = Gtk.Button(label="Send")
+        self.send_btn.add_css_class("accent")
+        self.send_btn.set_halign(Gtk.Align.START)
+        self.send_btn.connect("clicked", self.do_send)
+        box.append(self.send_btn)
+        self.progress = Gtk.ProgressBar()
+        box.append(self.progress)
+        self.status = label("", "dim", wrap=True)
+        box.append(self.status)
+        self.find()
+        return box
+
+    def choose_file(self, _b):
+        dialog = Gtk.FileDialog()
+        dialog.open(self, None, self.chosen)
+
+    def chosen(self, dialog, result):
+        try:
+            f = dialog.open_finish(result)
+        except GLib.Error:
+            return
+        self.file = f.get_path()
+        self.file_label.set_text(os.path.basename(self.file))
+
+    def find(self):
+        self.status.set_text("Looking for nearby computers…")
+        bg(drop.find_devices, self.show_devices)
+
+    def show_devices(self, devices):
+        while (c := self.devices.get_first_child()):
+            self.devices.remove(c)
+        self.found = devices
+        self.status.set_text("" if devices else "No nearby computers found. Ask the other person to turn Drop on, or type their address.")
+        for d in devices:
+            self.devices.append(Gtk.Label(label=f"{d['name']}   ({d['address']})", xalign=0, margin_top=10, margin_bottom=10, margin_start=12))
+
+    def pick_device(self, lb, row):
+        self.device = self.found[row.get_index()] if row else None
+
+    def do_send(self, _b):
+        if not self.file:
+            return self.status.set_text("Choose a file first.")
+        if self.manual.get_text().strip():
+            host, port = drop.parse_target(self.manual.get_text())
+        elif self.device:
+            host, port = self.device["address"], self.device["port"]
+        else:
+            return self.status.set_text("Pick a nearby computer or type an address.")
+        code = self.code.get_text().strip()
+        if len(code) != 6 or not code.isdigit():
+            return self.status.set_text("Enter the 6 digit code shown on the other computer.")
+        self.send_btn.set_sensitive(False)
+        self.status.set_text("Sending…")
+        def work():
+            try:
+                r = drop.send_file(self.file, host, port, code, progress=lambda s, t: GLib.idle_add(self.progress.set_fraction, s / max(t, 1)))
+                GLib.idle_add(self.sent, f"Sent. It is saved on the other computer as “{r['saved_as']}”.")
+            except drop.DropError as exc:
+                msg = {403: "That code is not right. Check it and try again.", 423: "The other computer has locked Drop after too many wrong codes. Ask them to turn it on again.",
+                       413: "That file is too large.", 422: "The file was damaged in transfer. Please try again."}.get(exc.status, str(exc))
+                GLib.idle_add(self.sent, msg)
+        threading.Thread(target=work, daemon=True).start()
+
+    def sent(self, message):
+        self.status.set_text(message)
+        self.send_btn.set_sensitive(True)
+
+    # ------------------------------------------------------------ receive
+    def receive_page(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        box.append(label("Turn Drop on to let one nearby computer send you files. You get a code to give them. "
+                         "Drop switches itself off after 10 minutes.", "dim", wrap=True))
+        self.toggle = Gtk.Button(label="Turn Drop on")
+        self.toggle.add_css_class("accent")
+        self.toggle.set_halign(Gtk.Align.START)
+        self.toggle.connect("clicked", self.toggle_receive)
+        box.append(self.toggle)
+        self.code_label = label("", "big")
+        box.append(self.code_label)
+        self.info = label("", "dim")
+        box.append(self.info)
+        self.got = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        box.append(self.got)
+        self.open_btn = Gtk.Button(label="Open the folder")
+        self.open_btn.set_halign(Gtk.Align.START)
+        self.open_btn.connect("clicked", lambda b: subprocess.Popen(["xdg-open", str(drop.default_dir())]))
+        box.append(self.open_btn)
+        return box
+
+    def toggle_receive(self, _b):
+        if self.server:
+            return self.stop_receive("Drop is off.")
+        self.server = drop.DropServer(on_receive=lambda p: GLib.idle_add(self.add_received, p.name)).start()
+        self.toggle.set_label("Turn Drop off")
+        self.code_label.set_text(" ".join((self.server.code[:3], self.server.code[3:])))
+        self.tick()
+        GLib.timeout_add_seconds(1, self.tick)
+
+    def tick(self):
+        s = self.server
+        if not s:
+            return False
+        left = int(s.expires - drop.time.time()) if s.expires else 0
+        if s.locked:
+            self.stop_receive("Locked after too many wrong codes. Turn Drop on again for a new code.")
+            return False
+        if left <= 0:
+            self.stop_receive("Drop switched itself off.")
+            return False
+        self.info.set_text(f"Your computer appears as “{s.name}”. Switches off in {left // 60}:{left % 60:02d}.")
+        return True
+
+    def stop_receive(self, message):
+        if self.server:
+            self.server.stop()
+        self.server = None
+        self.toggle.set_label("Turn Drop on")
+        self.code_label.set_text("")
+        self.info.set_text(message)
+
+    def add_received(self, name):
+        self.got.append(label(f"✓  Received {name}", "good"))
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.saymy.Drop")
+
+    def do_activate(self):
+        (self.props.active_window or DropWindow(self)).present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run([]))

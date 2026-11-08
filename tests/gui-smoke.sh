@@ -19,5 +19,10 @@ done
 log="$(mktemp)"
 xvfb-run -a -s "-screen 0 1000x700x24" bash -c "python3 config/includes.chroot/usr/bin/saymy-doctor --demo >'$log' 2>&1 & pid=\$!; sleep 4; kill -0 \$pid && import -window root /tmp/saymy-shots/doctor.png; kill \$pid" || fail=1
 grep -q Traceback "$log" && { echo "FAIL doctor"; cat "$log"; fail=1; }
+for pg in Send Receive; do
+  log="$(mktemp)"
+  xvfb-run -a -s "-screen 0 1000x700x24" bash -c "SAYMY_START_PAGE=$pg SAYMY_DEMO_ON=1 python3 config/includes.chroot/usr/bin/saymy-drop --demo >'$log' 2>&1 & pid=\$!; sleep 4; kill -0 \$pid && import -window root /tmp/saymy-shots/drop_$pg.png; kill \$pid" || fail=1
+  grep -q Traceback "$log" && { echo "FAIL drop $pg"; cat "$log"; fail=1; }
+done
 [ "$fail" -eq 0 ] && echo "GUI SMOKE OK: screenshots in /tmp/saymy-shots" || echo "GUI SMOKE FAILED"
 exit "$fail"
