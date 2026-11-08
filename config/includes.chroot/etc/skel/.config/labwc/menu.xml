@@ -8,6 +8,7 @@
     <item label="Browser"><action name="Execute"><command>firefox-esr</command></action></item>
     <item label="Terminal"><action name="Execute"><command>foot</command></action></item>
     <separator />
+    <item label="Settings"><action name="Execute"><command>saymy-settings</command></action></item>
     <item label="Language"><action name="Execute"><command>saymy-language</command></action></item>
     <item label="Install SayMy OS"><action name="Execute"><command>saymy-install</command></action></item>
     <separator />

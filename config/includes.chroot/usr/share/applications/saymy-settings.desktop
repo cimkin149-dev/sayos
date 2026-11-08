@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Settings
+GenericName=System Settings
+Comment=Network, display, sound, power, appearance, language, data
+Exec=saymy-settings
+Icon=preferences-system
+Categories=Settings;

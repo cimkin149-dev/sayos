@@ -23,6 +23,7 @@ import saymy_i18n as i18n      # noqa: E402
 import saymy_say as say        # noqa: E402
 import saymy_power as power    # noqa: E402
 import saymy_data as data      # noqa: E402
+import saymy_settings_backend as sb  # noqa: E402
 
 
 class SayBar(unittest.TestCase):
@@ -216,6 +217,72 @@ class DataWallet(unittest.TestCase):
     def test_human(self):
         self.assertEqual(data.human(1_500_000), "1.5 MB")
         self.assertEqual(data.human(2_300_000_000), "2.3 GB")
+
+
+class SettingsBackend(unittest.TestCase):
+    def test_parse_wifi(self):
+        text = "*:Kampala-Home:82:WPA2\n :MakCampus:64:WPA2\n :Cafe\\: Guest:41:--\n :MakCampus:70:WPA2\n ::50:WPA2"
+        nets = sb.parse_wifi(text)
+        self.assertEqual([n["ssid"] for n in nets], ["Kampala-Home", "MakCampus", "Cafe: Guest"])
+        self.assertTrue(nets[0]["connected"])
+        self.assertEqual(nets[1]["signal"], 70)           # strongest duplicate wins
+        self.assertFalse(nets[2]["secure"])
+
+    def test_parse_brightness_and_volume(self):
+        self.assertEqual(sb.parse_brightness("intel_backlight,backlight,4800,50%,9600"), 50)
+        self.assertIsNone(sb.parse_brightness("garbage"))
+        self.assertEqual(sb.parse_volume("Volume: 0.60"), (60, False))
+        self.assertEqual(sb.parse_volume("Volume: 0.35 [MUTED]"), (35, True))
+        self.assertEqual(sb.parse_volume("nothing"), (None, False))
+
+    def test_missing_tools_degrade_gracefully(self):
+        ok, out = sb.run(["definitely-not-a-real-tool"])
+        self.assertEqual((ok, out), (False, ""))
+
+    def test_normalize_hex(self):
+        self.assertEqual(sb.normalize_hex("ff8a1f"), "#FF8A1F")
+        for bad in ("", "#12345", "#GGGGGG", "red"):
+            with self.assertRaises(ValueError):
+                sb.normalize_hex(bad)
+
+    def test_apply_accent_recolours_every_file(self):
+        with tempfile.TemporaryDirectory() as d:
+            home = Path(d)
+            os.environ["XDG_CONFIG_HOME"] = d + "/cfg"
+            try:
+                files = {
+                    ".config/waybar/style.css": "@define-color sun #FF8A1F;\n#x{border:3px solid @sun}",
+                    ".config/fuzzel/fuzzel.ini": "match=FF8A1FFF\nborder=FF8A1FFF\nselection-match=F5B93AFF\n",
+                    ".config/mako/config": "border-color=#FF8A1F\n",
+                    ".config/gtk-3.0/gtk.css": "@define-color accent_color #ff8a1f;\n",
+                    ".config/gtk-4.0/gtk.css": "@define-color accent_color #FF8A1F;\n",
+                    ".local/share/themes/SayMy/labwc/themerc": "window.active.border.color: #FF8A1F\n",
+                }
+                for rel, text in files.items():
+                    (home / rel).parent.mkdir(parents=True, exist_ok=True)
+                    (home / rel).write_text(text)
+                changed = sb.apply_accent("#2F8FD1", home=home, reload=False)
+                self.assertEqual(len(changed), 6)
+                self.assertIn("@define-color sun #2F8FD1", (home / ".config/waybar/style.css").read_text())
+                self.assertIn("match=2F8FD1FF", (home / ".config/fuzzel/fuzzel.ini").read_text())
+                self.assertIn("selection-match=F5B93AFF", (home / ".config/fuzzel/fuzzel.ini").read_text())  # untouched
+                self.assertIn("#2F8FD1", (home / ".config/gtk-3.0/gtk.css").read_text().upper())
+                self.assertEqual(sb.load_appearance()["accent"], "#2F8FD1")
+                # second change starts from the saved accent
+                sb.apply_accent("#3FA66B", home=home, reload=False)
+                self.assertNotIn("2F8FD1", (home / ".config/mako/config").read_text().upper())
+            finally:
+                del os.environ["XDG_CONFIG_HOME"]
+
+    def test_demo_mode(self):
+        os.environ["SAYMY_DEMO"] = "1"
+        try:
+            self.assertEqual(sb.volume_get(), (60, False))
+            self.assertEqual(sb.brightness_get(), 70)
+            self.assertEqual(sb.wifi_list()[0]["ssid"], "Kampala-Home")
+            self.assertEqual(sb.power_summary()["cuts"], 6)
+        finally:
+            del os.environ["SAYMY_DEMO"]
 
 
 class Sky(unittest.TestCase):

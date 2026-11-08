@@ -20,6 +20,9 @@ Written plainly so nothing surprises you.
 - **Installer**: Calamares uses Debian's tested module settings with SayMy branding on top. Install to a
   VM disk first, never to a machine with data you care about, until you have done it successfully once.
 
+- **SayMy Settings** was run on a virtual screen with sample data and its parsing and accent logic is unit tested, but it has not yet
+  been tried against a real NetworkManager, battery or sound server. Night light, screen timeout and system-wide language are not built yet.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).

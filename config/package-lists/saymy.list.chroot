@@ -57,6 +57,10 @@ qt6-wayland
 xdg-desktop-portal-wlr
 xdg-desktop-portal-gtk
 
+# --- SayMy Settings (GTK4 + Python)
+python3-gi
+gir1.2-gtk-4.0
+
 # --- SayMy Shell building blocks (Stage 1: labwc + waybar + fuzzel)
 labwc
 waybar

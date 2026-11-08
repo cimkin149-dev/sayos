@@ -1,3 +1,4 @@
+@define-color sun #FF8A1F;
 /* SayMy panel. Colours from design/tokens/tokens.json */
 * { font-family: "Inter", "Noto Sans", sans-serif; font-size: 14px; border: none; min-height: 0; }
 
@@ -16,7 +17,7 @@ window#waybar > box {
 
 #taskbar button { background: transparent; border-radius: 10px; padding: 2px 8px; margin: 0 2px; }
 #taskbar button:hover { background: #1E3A55; }
-#taskbar button.active { background: #14283C; border-bottom: 3px solid #FF8A1F; }
+#taskbar button.active { background: #14283C; border-bottom: 3px solid @sun; }
 
 #custom-data, #pulseaudio, #network, #battery, #clock, #tray {
   color: #F3E9D8; background: #14283C; border-radius: 999px; padding: 4px 14px;

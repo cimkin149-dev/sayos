@@ -4,7 +4,8 @@
 data wallet, installer branding, translation groundwork.
 
 **Stage 2: SayMy Shell and settings**
-Settings app (language, price per GB, power thresholds), custom login screen, accent colour that follows
+Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about).
+Next: Users and Updates panels, night light, custom login screen, accent colour that follows
 the sky, first-run welcome, Modes (Study, Business, Home, Developer), screenshots-driven polish.
 
 **Stage 3: Apps and Packs**

@@ -1,0 +1,15 @@
+#!/usr/bin/env python3
+"""saymy-accent #RRGGBB : re-colour the whole desktop (panel, launcher, notifications, borders, GTK apps)."""
+import os, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_settings_backend as be
+
+if len(sys.argv) != 2:
+    print("usage: saymy-accent #RRGGBB", file=sys.stderr)
+    sys.exit(2)
+try:
+    changed = be.apply_accent(sys.argv[1])
+except ValueError as exc:
+    print(exc, file=sys.stderr)
+    sys.exit(1)
+print(f"accent set; {len(changed)} files updated")

@@ -21,7 +21,7 @@
   },
   "network": {
     "format-wifi": "{essid}", "format-ethernet": "LAN", "format-disconnected": "offline",
-    "tooltip-format": "{ifname}  {ipaddr}", "on-click": "foot -e nmtui"
+    "tooltip-format": "{ifname}  {ipaddr}", "on-click": "saymy-settings"
   },
   "battery": {
     "states": { "warning": 25, "critical": 10 },

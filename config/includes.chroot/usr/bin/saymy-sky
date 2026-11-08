@@ -36,6 +36,9 @@ while :; do
         current="$p"
         accent "$p" > "$cache/accent"
         echo "$p" > "$cache/phase"
+        if grep -q '"follow_sky": true' "${XDG_CONFIG_HOME:-$HOME/.config}/saymy/appearance.json" 2>/dev/null; then
+            saymy-accent "$(accent "$p")" >/dev/null 2>&1 &
+        fi
         pkill -x swaybg 2>/dev/null
         swaybg -i "$SHARE/wallpapers/saymy-$p.jpg" -m fill >/dev/null 2>&1 &
     fi

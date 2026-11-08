@@ -33,7 +33,7 @@ APP_ALIASES = {
     "terminal": "foot", "console": "foot", "command line": "foot",
     "notes": "mousepad", "editor": "mousepad", "text editor": "mousepad", "notepad": "mousepad",
     "sound": "pavucontrol", "audio": "pavucontrol",
-    "wifi": "nmtui", "network": "nmtui",
+    "wifi": "settings", "network": "settings", "mipangilio": "settings",
 }
 
 

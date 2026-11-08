@@ -10,6 +10,7 @@
     <!-- The Say Bar: the face of SayMy OS -->
     <keybind key="W-space"><action name="Execute" command="saymy-say"/></keybind>
     <keybind key="A-space"><action name="Execute" command="saymy-say"/></keybind>
+    <keybind key="W-comma"><action name="Execute" command="saymy-settings"/></keybind>
     <keybind key="W-a"><action name="Execute" command="fuzzel"/></keybind>
     <keybind key="W-Return"><action name="Execute" command="foot"/></keybind>
     <keybind key="W-e"><action name="Execute" command="pcmanfm"/></keybind>

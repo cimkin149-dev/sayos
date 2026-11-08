@@ -1,0 +1,414 @@
+#!/usr/bin/env python3
+"""SayMy Settings: network, display, sound, power, appearance, language, data and money, about.
+
+Every control calls a real system tool through saymy_settings_backend. Run with --demo to see
+sample data on a machine without Wi-Fi or a battery.
+"""
+import os
+import sys
+import threading
+
+if "--demo" in sys.argv:
+    os.environ["SAYMY_DEMO"] = "1"
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+
+import gi
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib, Gtk, Gdk  # noqa: E402
+
+import saymy_i18n as i18n              # noqa: E402
+import saymy_settings_backend as be    # noqa: E402
+
+CSS = """
+window { background: #0C1A2A; color: #F3E9D8; font-family: Inter, "Noto Sans", sans-serif; }
+.side { background: #14283C; padding: 12px 0; }
+.side list { background: transparent; }
+.side row { background: transparent; color: #F3E9D8; }
+.side row { padding: 11px 18px; border-radius: 12px; margin: 2px 10px; }
+.side row:hover { background: #1E3A55; }
+.side row:selected { background: @ACC@; color: #0C1A2A; font-weight: 700; }
+.brand { font-weight: 800; font-size: 18px; padding: 8px 22px 14px 22px; }
+.title { font-size: 28px; font-weight: 700; margin-bottom: 14px; }
+.row { padding: 14px 16px; background: #14283C; border-radius: 14px 14px 14px 4px; margin-bottom: 10px; }
+.rt { font-weight: 600; }
+.dim { color: #9FB3C8; font-size: 13px; }
+.good { color: #3FA66B; } .bad { color: #E0445B; }
+button { background: #1E3A55; color: #F3E9D8; border-radius: 999px; padding: 6px 18px; border: none; box-shadow: none; }
+button:hover { background: #27496B; }
+button.accent, button.toggle:checked { background: @ACC@; color: #0C1A2A; font-weight: 700; }
+switch { background: #1E3A55; border-radius: 999px; border: none; }
+switch:checked { background: @ACC@; }
+switch slider { background: #F3E9D8; border-radius: 999px; }
+scale trough { background: #1E3A55; min-height: 8px; border-radius: 999px; }
+scale highlight { background: @ACC@; border-radius: 999px; }
+scale slider { background: #F3E9D8; min-width: 22px; min-height: 22px; border-radius: 999px; }
+entry, passwordentry { background: #0C1A2A; color: #F3E9D8; border-radius: 12px; border: 1px solid #1E3A55; padding: 6px 12px; }
+.swatch { min-width: 40px; min-height: 40px; padding: 0; border-radius: 999px; border: 3px solid transparent; }
+.swatch.sel { border-color: #F3E9D8; }
+"""
+
+
+def css_for(accent):
+    extra = "".join(f".sw-{n} {{ background: {h}; }}\n" for n, h in be.ACCENTS.items())
+    return CSS.replace("@ACC@", accent) + extra
+
+
+def bg(fn, done):
+    """Run fn off the main thread so the window never freezes; then call done(result) on it."""
+    def worker():
+        result = fn()
+        GLib.idle_add(done, result)
+    threading.Thread(target=worker, daemon=True).start()
+
+
+def debounced(fn, ms=180):
+    state = {"id": 0}
+
+    def call(*args):
+        if state["id"]:
+            GLib.source_remove(state["id"])
+
+        def fire():
+            state["id"] = 0
+            fn(*args)
+            return False
+        state["id"] = GLib.timeout_add(ms, fire)
+    return call
+
+
+def label(text, css=None, xalign=0.0, wrap=False):
+    w = Gtk.Label(label=text, xalign=xalign, wrap=wrap)
+    if css:
+        w.add_css_class(css)
+    return w
+
+
+def row(title, sub=None, widget=None):
+    box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=14)
+    box.add_css_class("row")
+    txt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+    txt.set_hexpand(True)
+    txt.append(label(title, "rt"))
+    if sub:
+        txt.append(label(sub, "dim", wrap=True))
+    box.append(txt)
+    if widget is not None:
+        widget.set_valign(Gtk.Align.CENTER)
+        box.append(widget)
+    return box
+
+
+def switch(active, on_change):
+    sw = Gtk.Switch()
+    sw.set_active(active)
+    sw.connect("state-set", lambda s, state: (on_change(state), False)[1])
+    return sw
+
+
+def scale(value, on_change):
+    sc = Gtk.Scale.new_with_range(Gtk.Orientation.HORIZONTAL, 0, 100, 1)
+    sc.set_value(value)
+    sc.set_size_request(280, -1)
+    sc.set_draw_value(False)
+    cb = debounced(on_change)
+    sc.connect("value-changed", lambda s: cb(int(s.get_value())))
+    return sc
+
+
+def page(title):
+    outer = Gtk.ScrolledWindow()
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+    for side in ("start", "end"):
+        getattr(box, f"set_margin_{side}")(36)
+    box.set_margin_top(28)
+    box.set_margin_bottom(28)
+    box.append(label(title, "title"))
+    outer.set_child(box)
+    return outer, box
+
+
+class Settings(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="Settings")
+        self.set_default_size(960, 620)
+        self.accent = be.load_appearance().get("accent", be.DEFAULT_ACCENT)
+        self.provider = Gtk.CssProvider()
+        self.apply_css()
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), self.provider,
+                                                  Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        root = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
+        side = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        side.add_css_class("side")
+        side.set_size_request(230, -1)
+        side.append(label("SayMy Settings", "brand"))
+        self.list = Gtk.ListBox()
+        self.list.set_vexpand(True)
+        side.append(self.list)
+        self.stack = Gtk.Stack()
+        self.stack.set_hexpand(True)
+        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        self.panels = [("Network", self.network), ("Display", self.display), ("Sound", self.sound),
+                       ("Power", self.power), ("Appearance", self.appearance), ("Language", self.language),
+                       ("Data & Money", self.data), ("About", self.about)]
+        for name, build in self.panels:
+            self.list.append(Gtk.Label(label=name, xalign=0))
+            self.stack.add_named(build(), name)
+        self.list.connect("row-selected", lambda lb, r: r and self.stack.set_visible_child_name(self.panels[r.get_index()][0]))
+        start = os.environ.get("SAYMY_START_PANEL", "Network")
+        idx = next((i for i, p in enumerate(self.panels) if p[0] == start), 0)
+        self.list.select_row(self.list.get_row_at_index(idx))
+        root.append(side)
+        root.append(self.stack)
+        self.set_child(root)
+
+    def apply_css(self):
+        css = css_for(self.accent)
+        if hasattr(self.provider, "load_from_string"):
+            self.provider.load_from_string(css)
+        else:
+            self.provider.load_from_data(css.encode())
+
+    # ---------------------------------------------------------- Network
+    def network(self):
+        outer, box = page("Network")
+        self.wifi_status = label("", "dim")
+        box.append(row("Wi-Fi", "Turn the radio on or off", switch(be.wifi_enabled(), self.wifi_toggle)))
+        head = Gtk.Box(spacing=10)
+        head.append(label("Available networks", "rt"))
+        refresh = Gtk.Button(label="Refresh")
+        refresh.connect("clicked", lambda b: self.wifi_refresh())
+        head.append(refresh)
+        head.set_margin_bottom(8)
+        box.append(head)
+        self.wifi_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self.wifi_box)
+        box.append(self.wifi_status)
+        self.wifi_refresh()
+        return outer
+
+    def wifi_toggle(self, on):
+        bg(lambda: be.wifi_set(on), lambda ok: self.wifi_refresh())
+
+    def wifi_refresh(self):
+        self.wifi_status.set_text("Looking for networks…")
+        bg(be.wifi_list, self.wifi_show)
+
+    def wifi_show(self, nets):
+        while (c := self.wifi_box.get_first_child()):
+            self.wifi_box.remove(c)
+        self.wifi_status.set_text("" if nets else "No networks found. Wi-Fi may be off or unavailable on this computer.")
+        for n in nets:
+            sub = ("Connected · " if n["connected"] else "") + ("Secured" if n["secure"] else "Open") + f" · {n['signal']}%"
+            btn = Gtk.Button(label="Connected" if n["connected"] else "Connect")
+            btn.set_sensitive(not n["connected"])
+            if not n["connected"]:
+                btn.add_css_class("accent")
+                btn.connect("clicked", lambda b, net=n: self.wifi_connect(net))
+            self.wifi_box.append(row(n["ssid"], sub, btn))
+
+    def wifi_connect(self, net):
+        if not net["secure"]:
+            return self.wifi_do(net["ssid"], "")
+        win = Gtk.Window(title=f"Connect to {net['ssid']}", transient_for=self, modal=True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{m}")(22)
+        box.append(label(f"Password for {net['ssid']}", "rt"))
+        entry = Gtk.PasswordEntry()
+        entry.set_show_peek_icon(True)
+        entry.set_size_request(320, -1)
+        box.append(entry)
+        buttons = Gtk.Box(spacing=10)
+        cancel, ok = Gtk.Button(label="Cancel"), Gtk.Button(label="Connect")
+        ok.add_css_class("accent")
+        cancel.connect("clicked", lambda b: win.close())
+        ok.connect("clicked", lambda b: (win.close(), self.wifi_do(net["ssid"], entry.get_text())))
+        entry.connect("activate", lambda e: ok.emit("clicked"))
+        buttons.append(cancel)
+        buttons.append(ok)
+        box.append(buttons)
+        win.set_child(box)
+        win.present()
+
+    def wifi_do(self, ssid, password):
+        self.wifi_status.set_text(f"Connecting to {ssid}…")
+        def done(res):
+            self.wifi_status.set_text(f"Connected to {ssid}." if res[0] else "Could not connect. Check the password and try again.")
+            self.wifi_refresh()
+        bg(lambda: be.wifi_connect(ssid, password), done)
+
+    # ---------------------------------------------------------- Display
+    def display(self):
+        outer, box = page("Display")
+        b = be.brightness_get()
+        if b is None:
+            box.append(row("Brightness", "No adjustable screen brightness was found on this computer."))
+        else:
+            box.append(row("Brightness", "Lower brightness stretches battery life during a power cut",
+                           scale(b, lambda v: bg(lambda: be.brightness_set(v), lambda r: None))))
+        box.append(row("Night light and screen timeout", "Coming in 0.2"))
+        return outer
+
+    # ---------------------------------------------------------- Sound
+    def sound(self):
+        outer, box = page("Sound")
+        vol, muted = be.volume_get()
+        if vol is None:
+            box.append(row("Volume", "The audio service is not running on this computer."))
+        else:
+            box.append(row("Volume", None, scale(min(vol, 100), lambda v: bg(lambda: be.volume_set(v), lambda r: None))))
+            box.append(row("Mute", None, switch(muted, lambda on: bg(lambda: be.mute_set(on), lambda r: None))))
+        return outer
+
+    # ---------------------------------------------------------- Power
+    def power(self):
+        outer, box = page("Power")
+        info = be.power_summary()
+        st = info["state"]
+        if st["battery_pct"] is None:
+            box.append(row("Battery", "No battery found. This computer runs on mains power."))
+        else:
+            src = "On mains power" if st["ac"] else "Running on battery"
+            box.append(row("Battery", f"{src} · {st['battery_status'] or ''}", label(f"{st['battery_pct']}%", "rt")))
+        prof = be.profile_get()
+        seg = Gtk.Box(spacing=6)
+        first = None
+        for p in be.PROFILES:
+            b = Gtk.ToggleButton(label=p.replace("-", " ").title())
+            if first is None:
+                first = b
+            else:
+                b.set_group(first)
+            b.set_active(p == prof)
+            b.connect("toggled", lambda w, name=p: w.get_active() and bg(lambda: be.profile_set(name), lambda r: None))
+            seg.append(b)
+        box.append(row("Power mode", "Power saver slows the processor to save battery" if prof else "Power profiles are not available on this computer.", seg if prof else None))
+        ok, out = be.run(["systemctl", "--user", "is-active", "saymy-power"])
+        active = (out == "active") or be.demo()
+        g = label("Active" if active else "Not running", "good" if active else "bad")
+        box.append(row("Power-cut guard", "Protects your session, dims the screen, and warns you when mains power drops", g))
+        box.append(row("Power Diary", "Last 30 days", label(f"{info['cuts']} cuts · {info['hours']} h without mains", "rt")))
+        return outer
+
+    # ---------------------------------------------------------- Appearance
+    def appearance(self):
+        outer, box = page("Appearance")
+        cfg = be.load_appearance()
+        sw_box = Gtk.Box(spacing=10)
+        self.swatches = {}
+        for name, hexv in be.ACCENTS.items():
+            b = Gtk.Button()
+            b.add_css_class("swatch")
+            b.add_css_class(f"sw-{name}")
+            b.set_tooltip_text(name)
+            if hexv.upper() == self.accent.upper():
+                b.add_css_class("sel")
+            b.connect("clicked", lambda w, h=hexv: self.set_accent(h))
+            self.swatches[hexv] = b
+            sw_box.append(b)
+        box.append(row("Accent colour", "Changes the panel, launcher, notifications, window borders and apps", sw_box))
+        box.append(row("Follow the sky", "The accent shifts gently from sunrise to night, with the wallpaper",
+                       switch(bool(cfg.get("follow_sky")), self.set_follow)))
+        self.appearance_status = label("", "dim")
+        box.append(self.appearance_status)
+        return outer
+
+    def set_accent(self, hexv):
+        def done(changed):
+            self.accent = hexv
+            self.apply_css()
+            for h, b in self.swatches.items():
+                (b.add_css_class if h.upper() == hexv.upper() else b.remove_css_class)("sel")
+            self.appearance_status.set_text(f"Updated {len(changed)} files. Open apps pick up the new colour when restarted.")
+        cfg = be.load_appearance()
+        cfg["follow_sky"] = False
+        be.save_appearance(cfg)
+        bg(lambda: be.apply_accent(hexv), done)
+
+    def set_follow(self, on):
+        cfg = be.load_appearance()
+        cfg["follow_sky"] = on
+        be.save_appearance(cfg)
+
+    # ---------------------------------------------------------- Language
+    def language(self):
+        outer, box = page("Language")
+        langs = i18n.available_languages()
+        current = i18n.current_language()
+        for code, name in langs.items():
+            b = Gtk.Button(label="Current" if code == current else "Use")
+            if code == current:
+                b.set_sensitive(False)
+            else:
+                b.add_css_class("accent")
+                b.connect("clicked", lambda w, c=code: self.set_language(c))
+            box.append(row(name, "Needs a native speaker to translate" if code == "lg" else None, b))
+        box.append(label("Applies to SayMy tools: the Say Bar, notifications and the Power Diary. "
+                         "System-wide language follows in 0.2. Missing words fall back to English.", "dim", wrap=True))
+        return outer
+
+    def set_language(self, code):
+        d = i18n.config_dir()
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "lang").write_text(code)
+        self.stack.remove(self.stack.get_child_by_name("Language"))
+        self.stack.add_named(self.language(), "Language")
+        self.stack.set_visible_child_name("Language")
+
+    # ---------------------------------------------------------- Data & Money
+    def data(self):
+        import saymy_data
+        outer, box = page("Data & Money")
+        ledger = saymy_data._load(saymy_data.ledger_path(), {"days": {}})
+        t = saymy_data.totals(ledger)
+        for title, key in (("Today", "today"), ("Last 7 days", "week"), ("This month", "month")):
+            cost = saymy_data.cost_text(t[key])
+            box.append(row(title, None, label(saymy_data.human(t[key]) + (f" · {cost}" if cost else ""), "rt")))
+        cfg = saymy_data.price()
+        price = Gtk.Entry(placeholder_text="5000")
+        price.set_size_request(110, -1)
+        price.set_text(str(cfg.get("price_per_gb") or ""))
+        cur = Gtk.Entry(placeholder_text="UGX")
+        cur.set_max_length(4)
+        cur.set_text(cfg.get("currency", ""))
+        cur.set_size_request(90, -1)
+        pair = Gtk.Box(spacing=8)
+        pair.append(price)
+        pair.append(cur)
+        box.append(row("What does one gigabyte cost?", "Nothing is assumed. Enter your own price and currency.", pair))
+        status = label("", "dim")
+        save = Gtk.Button(label="Save")
+        save.add_css_class("accent")
+        save.set_halign(Gtk.Align.START)
+
+        def do_save(_b):
+            try:
+                saymy_data.set_price(float(price.get_text()), cur.get_text() or "")
+                status.set_text("Saved. The panel counter now shows your spending.")
+            except ValueError:
+                status.set_text("Please enter the price as a number.")
+        save.connect("clicked", do_save)
+        box.append(save)
+        box.append(status)
+        return outer
+
+    # ---------------------------------------------------------- About
+    def about(self):
+        outer, box = page("About")
+        info = be.system_info()
+        for title, key in (("System", "os"), ("Kernel", "kernel"), ("Processor", "cpu"), ("Memory", "ram"), ("Storage", "disk")):
+            box.append(row(title, None, label(info[key] or "Unknown", "rt")))
+        box.append(label("SayMy OS · Born in Africa. Built for the world.", "dim"))
+        return outer
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.saymy.Settings")
+
+    def do_activate(self):
+        (self.props.active_window or Settings(self)).present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run([a for a in sys.argv if a != "--demo"]))
