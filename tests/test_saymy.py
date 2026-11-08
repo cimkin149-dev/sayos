@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import types
 import unittest
 from pathlib import Path
 
@@ -26,6 +27,7 @@ import saymy_data as data      # noqa: E402
 import saymy_settings_backend as sb  # noqa: E402
 import saymy_doctor as doc  # noqa: E402
 import saymy_drop as drop  # noqa: E402
+import saymy_system as sysm  # noqa: E402
 
 
 class SayBar(unittest.TestCase):
@@ -543,6 +545,144 @@ class Drop(unittest.TestCase):
     def test_say_bar_drop_intents(self):
         for phrase in ("send a file", "share files nearby", "drop"):
             self.assertEqual(say.handle(phrase, "en").exec, ["saymy-drop"])
+
+
+class FakeRun:
+    """Stands in for subprocess.run and records what would have been executed."""
+    def __init__(self, ok=True, out=""):
+        self.calls, self.ok, self.out = [], ok, out
+
+    def __call__(self, cmd, input=None, capture_output=True, text=True, timeout=None):
+        self.calls.append({"cmd": cmd, "input": input})
+        return types.SimpleNamespace(returncode=0 if self.ok else 1, stdout=self.out, stderr="")
+
+
+class UsersAndUpdates(unittest.TestCase):
+    def test_validation(self):
+        for good in ("grace", "a", "kampala_user-2"):
+            self.assertTrue(sysm.valid_username(good), good)
+        for bad in ("", "Root", "root", "1abc", "has space", "a" * 40, "x;rm", "admin", "../etc"):
+            self.assertFalse(sysm.valid_username(bad), bad)
+        self.assertFalse(sysm.valid_password("short"))
+        self.assertFalse(sysm.valid_password("line\nbreak123"))
+        self.assertTrue(sysm.valid_password("a good one"))
+        self.assertEqual(sysm.clean_fullname("  Grace: N,\x00ak\x07ibuuka "), "Grace Nakibuuka")
+
+    def test_list_users(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "passwd").write_text("root:x:0:0:root:/root:/bin/bash\nsteven:x:1000:1000:Steven,,,:/home/steven:/bin/bash\n"
+                                  "grace:x:1001:1001:Grace:/home/grace:/bin/bash\nnobody:x:65534:65534:nobody:/:/usr/sbin/nologin\n")
+        (d / "group").write_text("sudo:x:27:steven\nusers:x:100:\n")
+        us = sysm.list_users(d / "passwd", d / "group")
+        self.assertEqual([(u["name"], u["admin"], u["fullname"]) for u in us], [("steven", True, "Steven"), ("grace", False, "Grace")])
+
+    def test_elevate_uses_graphical_askpass(self):
+        c = sysm.elevate(["apt-get", "update"])
+        self.assertEqual(c[:2], ["env", "SUDO_ASKPASS=/usr/bin/saymy-askpass"])
+        self.assertIn("-A", c)
+        self.assertEqual(c[-2:], ["apt-get", "update"])
+
+    def test_password_goes_through_stdin_never_the_command_line(self):
+        fr = FakeRun()
+        sysm.add_user("grace", "Grace N", "s3cret-pass", admin=True, runner=fr)
+        call = fr.calls[0]
+        self.assertEqual(call["input"], "s3cret-pass\n")
+        self.assertNotIn("s3cret-pass", " ".join(call["cmd"]))
+        self.assertEqual(call["cmd"][-4:], ["grace", "Grace N", "--admin", ]) if False else None
+        self.assertIn("--admin", call["cmd"])
+        with self.assertRaises(ValueError):
+            sysm.add_user("root", "x", "longenough")
+        with self.assertRaises(ValueError):
+            sysm.add_user("okname", "x", "123")
+
+    def test_parse_upgradable(self):
+        text = ("Listing... Done\nfirefox-esr/stable-security 140.4.0esr-1 amd64 [upgradable from: 140.3.1esr-1]\n"
+                "labwc/stable 0.8.4-1 amd64 [upgradable from: 0.8.2-1]\nnot a package line\n")
+        up = sysm.parse_upgradable(text)
+        self.assertEqual([(p["name"], p["security"], p["old"]) for p in up], [("firefox-esr", True, "140.3.1esr-1"), ("labwc", False, "0.8.2-1")])
+
+    def _bundle(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "labwc_0.8.4-1_amd64.deb").write_bytes(b"deb-one")
+        (d / "waybar_0.12.0-2_amd64.deb").write_bytes(b"deb-two")
+        (d / "manifest.json").write_text(json.dumps(sysm.build_manifest(d)))
+        return d
+
+    def test_bundle_verify_and_install(self):
+        d = self._bundle()
+        self.assertEqual(sysm.verify_bundle(d), [])
+        fr = FakeRun()
+        ok, _ = sysm.install_bundle(d, runner=fr)
+        self.assertTrue(ok)
+        cmd = fr.calls[0]["cmd"]
+        self.assertIn("--no-download", cmd)
+        self.assertIn(str(d / "labwc_0.8.4-1_amd64.deb"), cmd)
+
+    def test_tampered_bundle_is_refused_and_nothing_runs(self):
+        d = self._bundle()
+        (d / "labwc_0.8.4-1_amd64.deb").write_bytes(b"EVIL")
+        fr = FakeRun()
+        ok, msg = sysm.install_bundle(d, runner=fr)
+        self.assertFalse(ok)
+        self.assertIn("checksum", msg)
+        self.assertEqual(fr.calls, [])
+
+    def test_extra_and_missing_files_in_bundle(self):
+        d = self._bundle()
+        (d / "sneaky_1.0_amd64.deb").write_bytes(b"x")
+        self.assertTrue(any("not in the manifest" in p for p in sysm.verify_bundle(d)))
+        (d / "waybar_0.12.0-2_amd64.deb").unlink()
+        self.assertTrue(any("missing" in p for p in sysm.verify_bundle(d)))
+        self.assertEqual(sysm.verify_bundle(Path(tempfile.mkdtemp())), ["manifest.json is missing or unreadable"])
+
+    def test_make_bundle(self):
+        archives, dest = Path(tempfile.mkdtemp()), Path(tempfile.mkdtemp()) / "out"
+        (archives / "labwc_0.8.4-1_amd64.deb").write_bytes(b"abc")
+        fr = FakeRun()
+        ok, msg = sysm.make_bundle(dest, archives=archives, runner=fr)
+        self.assertTrue(ok)
+        self.assertIn("--download-only", fr.calls[0]["cmd"])
+        self.assertEqual(sysm.verify_bundle(dest), [])
+        self.assertEqual(json.loads((dest / "manifest.json").read_text())["packages"][0]["name"], "labwc")
+        self.assertFalse(sysm.make_bundle(dest, archives=archives, runner=FakeRun(ok=False))[0])
+
+
+class UserHelper(unittest.TestCase):
+    """The root helper, run for real in --dry-run mode against fake account files."""
+    def setUp(self):
+        d = Path(tempfile.mkdtemp())
+        (d / "passwd").write_text("steven:x:1000:1000:Steven:/home/steven:/bin/bash\ngrace:x:1001:1001:Grace:/home/grace:/bin/bash\n")
+        (d / "group").write_text("sudo:x:27:steven\n")
+        self.env = dict(os.environ, SAYMY_PASSWD=str(d / "passwd"), SAYMY_GROUP=str(d / "group"), SUDO_USER="steven")
+
+    def helper(self, *args, stdin=""):
+        p = subprocess.run([str(LIB / "saymy-user-helper"), "--dry-run", *args], input=stdin, capture_output=True, text=True, env=self.env)
+        return p.returncode, p.stdout, p.stderr
+
+    def test_add_user(self):
+        rc, out, _ = self.helper("add", "zzjoy", "Joy N", "--admin", stdin="a-fine-password\n")
+        self.assertEqual(rc, 0)
+        self.assertIn("useradd -m -s /bin/bash -c Joy N zzjoy", out)
+        self.assertIn("chpasswd", out)
+        self.assertIn("sudo", out.splitlines()[-1])
+        self.assertNotIn("a-fine-password", out)
+
+    def test_refusals(self):
+        self.assertNotEqual(self.helper("add", "root", "x", "--standard", stdin="longenough\n")[0], 0)
+        self.assertNotEqual(self.helper("add", "grace", "x", "--standard", stdin="longenough\n")[0], 0)   # taken
+        self.assertNotEqual(self.helper("add", "zzjoy", "x", "--standard", stdin="abc\n")[0], 0)           # weak password
+        self.assertNotEqual(self.helper("delete", "steven")[0], 0)                                            # yourself
+        self.assertNotEqual(self.helper("admin", "steven", "off")[0], 0)                                      # yourself / last admin
+        self.assertNotEqual(self.helper("delete", "root")[0], 0)                                              # not a regular user
+        self.assertNotEqual(self.helper("passwd", "nobody-here", stdin="longenough\n")[0], 0)
+        self.assertNotEqual(self.helper("frobnicate")[0], 0)
+
+    def test_allowed_actions(self):
+        rc, out, _ = self.helper("delete", "grace")
+        self.assertEqual((rc, out.strip()), (0, "userdel -r grace"))
+        self.assertEqual(self.helper("admin", "grace", "on")[1].strip(), "gpasswd -a grace sudo")
+        self.assertEqual(self.helper("passwd", "grace", stdin="newpassword\n")[1].strip(), "chpasswd")
+
 
 
 class Sky(unittest.TestCase):

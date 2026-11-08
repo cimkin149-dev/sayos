@@ -44,7 +44,7 @@ class Settings(Gtk.ApplicationWindow):
         self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.panels = [("Network", self.network), ("Display", self.display), ("Sound", self.sound),
                        ("Power", self.power), ("Appearance", self.appearance), ("Language", self.language),
-                       ("Data & Money", self.data), ("About", self.about)]
+                       ("Data & Money", self.data), ("Users", self.users), ("Updates", self.updates), ("About", self.about)]
         for name, build in self.panels:
             self.list.append(Gtk.Label(label=name, xalign=0))
             self.stack.add_named(build(), name)
@@ -316,6 +316,232 @@ class Settings(Gtk.ApplicationWindow):
         box.append(save)
         box.append(status)
         return outer
+
+    # ---------------------------------------------------------- shared dialogs
+    def rebuild(self, name):
+        build = dict(self.panels)[name]
+        self.stack.remove(self.stack.get_child_by_name(name))
+        self.stack.add_named(build(), name)
+        self.stack.set_visible_child_name(name)
+
+    def form(self, title, fields, ok_label, on_ok):
+        """fields: [(key, label, 'text'|'password'|'switch')]. on_ok(values) returns an error message or None."""
+        win = Gtk.Window(title=title, transient_for=self, modal=True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{m}")(24)
+        box.append(label(title, "rt"))
+        widgets = {}
+        for key, text, kind in fields:
+            box.append(label(text, "dim"))
+            if kind == "password":
+                w = Gtk.PasswordEntry()
+                w.set_show_peek_icon(True)
+            elif kind == "switch":
+                w = Gtk.Switch()
+                w.set_halign(Gtk.Align.START)
+            else:
+                w = Gtk.Entry()
+            w.set_size_request(340, -1) if kind != "switch" else None
+            widgets[key] = w
+            box.append(w)
+        err = label("", "bad", wrap=True)
+        box.append(err)
+        buttons = Gtk.Box(spacing=10)
+        cancel, ok = Gtk.Button(label="Cancel"), Gtk.Button(label=ok_label)
+        ok.add_css_class("accent")
+        cancel.connect("clicked", lambda b: win.close())
+
+        def go(_b):
+            values = {k: (w.get_active() if isinstance(w, Gtk.Switch) else w.get_text()) for k, w in widgets.items()}
+            problem = on_ok(values)
+            if problem:
+                err.set_text(problem)
+            else:
+                win.close()
+        ok.connect("clicked", go)
+        buttons.append(cancel)
+        buttons.append(ok)
+        box.append(buttons)
+        win.set_child(box)
+        win.present()
+
+    def confirm(self, text, yes_label, on_yes):
+        win = Gtk.Window(title="Are you sure?", transient_for=self, modal=True)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{m}")(24)
+        box.append(label(text, "rt", wrap=True))
+        row_ = Gtk.Box(spacing=10)
+        no, yes = Gtk.Button(label="Cancel"), Gtk.Button(label=yes_label)
+        yes.add_css_class("accent")
+        no.connect("clicked", lambda b: win.close())
+        yes.connect("clicked", lambda b: (win.close(), on_yes()))
+        row_.append(no)
+        row_.append(yes)
+        box.append(row_)
+        win.set_child(box)
+        win.present()
+
+    def pick_folder(self, on_pick):
+        dialog = Gtk.FileDialog()
+        def done(d, result):
+            try:
+                f = d.select_folder_finish(result)
+            except GLib.Error:
+                return
+            on_pick(f.get_path())
+        dialog.select_folder(self, None, done)
+
+    # ---------------------------------------------------------- Users
+    def users(self):
+        import saymy_system as sysm
+        outer, box = page("Users")
+        people = sysm.demo_users() if be.demo() else sysm.list_users()
+        me = "steven" if be.demo() else sysm.current_user()
+        status = self.users_status = label("", "dim", wrap=True)
+
+        def after(res, ok_text):
+            status.set_text(ok_text if res[0] else "That did not work: " + (res[1].strip().splitlines() or ["unknown error"])[-1])
+            self.rebuild("Users")
+            self.users_status.set_text(status.get_text())
+
+        for u in people:
+            controls = Gtk.Box(spacing=6)
+            pw = Gtk.Button(label="Password")
+            pw.connect("clicked", lambda b, n=u["name"]: self.form(f"New password for {n}", [("a", "New password", "password"), ("b", "Type it again", "password")], "Change",
+                       lambda v, n=n: ("The two passwords are different." if v["a"] != v["b"] else None) or ("Use at least 6 characters." if not sysm.valid_password(v["a"]) else
+                                                                                                               bg(lambda: sysm.set_password(n, v["a"]), lambda r: after(r, f"Password changed for {n}.")))))
+            controls.append(pw)
+            if u["name"] != me:
+                adm = Gtk.Button(label="Remove admin" if u["admin"] else "Make admin")
+                adm.connect("clicked", lambda b, n=u["name"], a=u["admin"]: bg(lambda: sysm.set_admin(n, not a), lambda r: after(r, "Updated.")))
+                rem = Gtk.Button(label="Remove")
+                rem.connect("clicked", lambda b, n=u["name"]: self.confirm(f"Remove {n} and all their files? This cannot be undone.", "Remove",
+                            lambda: bg(lambda: sysm.remove_user(n), lambda r: after(r, f"{n} was removed."))))
+                controls.append(adm)
+                controls.append(rem)
+            who = (u["fullname"] or u["name"]) + (" (you)" if u["name"] == me else "")
+            box.append(row(who, f"{u['name']} · " + ("Administrator" if u["admin"] else "Standard"), controls))
+        add = Gtk.Button(label="Add a person")
+        add.add_css_class("accent")
+        add.set_halign(Gtk.Align.START)
+
+        def add_ok(v):
+            if not v["name"].strip():
+                return "Please enter a name."
+            if not sysm.valid_username(v["user"]):
+                return "The user name needs 1 to 31 lowercase letters, digits, - or _, starting with a letter."
+            if v["pw"] != v["pw2"]:
+                return "The two passwords are different."
+            if not sysm.valid_password(v["pw"]):
+                return "Use at least 6 characters."
+            bg(lambda: sysm.add_user(v["user"], v["name"], v["pw"], v["admin"]), lambda r: after(r, f"{v['name']} was added."))
+        add.connect("clicked", lambda b: self.form("Add a person", [("name", "Full name", "text"), ("user", "User name (lowercase, no spaces)", "text"),
+                    ("pw", "Password", "password"), ("pw2", "Type the password again", "password"), ("admin", "Administrator", "switch")], "Add", add_ok))
+        box.append(add)
+        box.append(status)
+        box.append(label("Changes ask for your password. Guests, shared-computer mode and per-person Spaces come in 0.3.", "dim", wrap=True))
+        return outer
+
+    # ---------------------------------------------------------- Updates
+    def updates(self):
+        import saymy_system as sysm
+        outer, box = page("Updates")
+        self.up_status = label("Checking for updates…", "dim", wrap=True)
+        box.append(self.up_status)
+        self.up_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        box.append(self.up_list)
+        btns = Gtk.Box(spacing=10)
+        check = Gtk.Button(label="Check for updates")
+        check.connect("clicked", lambda b: self.up_check())
+        self.install_btn = Gtk.Button(label="Install updates")
+        self.install_btn.add_css_class("accent")
+        self.install_btn.set_sensitive(False)
+        self.install_btn.connect("clicked", lambda b: self.up_install())
+        btns.append(check)
+        btns.append(self.install_btn)
+        box.append(btns)
+        self.log = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
+        self.log_scroll = Gtk.ScrolledWindow()
+        self.log_scroll.set_min_content_height(160)
+        self.log_scroll.set_child(self.log)
+        self.log_scroll.set_visible(False)
+        box.append(self.log_scroll)
+        off_title = label("Offline updates (USB or school network)", "rt")
+        off_title.set_margin_top(20)
+        box.append(off_title)
+        box.append(label("On a computer with internet, prepare a bundle. On other computers, install it with no internet. "
+                         "Only install bundles you made yourself or got from someone you trust: they install software as administrator.", "dim", wrap=True))
+        off = Gtk.Box(spacing=10)
+        prep = Gtk.Button(label="Prepare a bundle…")
+        prep.connect("clicked", lambda b: self.pick_folder(self.up_prepare))
+        inst = Gtk.Button(label="Install from a bundle…")
+        inst.connect("clicked", lambda b: self.pick_folder(self.up_from_bundle))
+        off.append(prep)
+        off.append(inst)
+        box.append(off)
+        self.up_refresh()
+        return outer
+
+    def up_refresh(self):
+        import saymy_system as sysm
+        bg(sysm.check_updates, self.up_show)
+
+    def up_show(self, ups):
+        import saymy_system as sysm
+        while (c := self.up_list.get_first_child()):
+            self.up_list.remove(c)
+        age = sysm.lists_age_hours()
+        when = "" if age is None else f" Package lists were refreshed {age} hours ago." if age else " Package lists are fresh."
+        if not ups:
+            self.up_status.set_text("Your computer is up to date." + when)
+            self.install_btn.set_sensitive(False)
+            return
+        sec = sum(u["security"] for u in ups)
+        self.up_status.set_text(f"{len(ups)} updates available" + (f", {sec} for security." if sec else ".") + when)
+        self.install_btn.set_sensitive(True)
+        for u in ups[:10]:
+            tag = label("Security", "bad") if u["security"] else label("", "dim")
+            self.up_list.append(row(u["name"], f"{u['old']} → {u['new']}", tag))
+        if len(ups) > 10:
+            self.up_list.append(label(f"…and {len(ups) - 10} more", "dim"))
+
+    def up_check(self):
+        import saymy_system as sysm
+        self.up_status.set_text("Refreshing the list. This needs the internet and your password…")
+        bg(sysm.update_lists, lambda r: (self.up_refresh(), r[0] or self.up_status.set_text("Could not refresh. Check your internet connection.")))
+
+    def append_log(self, line):
+        buf = self.log.get_buffer()
+        buf.insert(buf.get_end_iter(), line + "\n")
+        adj = self.log_scroll.get_vadjustment()
+        adj.set_value(adj.get_upper())
+
+    def up_install(self):
+        import saymy_system as sysm
+        self.install_btn.set_sensitive(False)
+        self.log.get_buffer().set_text("")
+        self.log_scroll.set_visible(True)
+        self.up_status.set_text("Installing updates. Please keep the computer on and plugged in.")
+        def work():
+            ok = sysm.install_updates(lambda ln: GLib.idle_add(self.append_log, ln))
+            GLib.idle_add(lambda: (self.up_status.set_text("Updates installed." if ok else "The update did not finish. Check the details below."), self.up_refresh()))
+        threading.Thread(target=work, daemon=True).start()
+
+    def up_prepare(self, folder):
+        import saymy_system as sysm
+        self.up_status.set_text("Downloading updates into the bundle. This needs the internet and your password…")
+        bg(lambda: sysm.make_bundle(folder), lambda r: self.up_status.set_text(r[1] if r[0] else "Could not prepare the bundle: " + r[1][-200:]))
+
+    def up_from_bundle(self, folder):
+        import saymy_system as sysm
+        problems = sysm.verify_bundle(folder)
+        if problems:
+            return self.up_status.set_text("This bundle cannot be installed: " + "; ".join(problems))
+        n = len(sysm.json.loads((sysm.Path(folder) / "manifest.json").read_text())["packages"])
+        self.confirm(f"Install {n} packages from this bundle as administrator?", "Install",
+                     lambda: bg(lambda: sysm.install_bundle(folder), lambda r: (self.up_status.set_text("Bundle installed." if r[0] else "Install failed: " + r[1][-300:]), self.up_refresh())))
 
     # ---------------------------------------------------------- About
     def about(self):

@@ -8,10 +8,8 @@ Written plainly so nothing surprises you.
 - Shell scripts pass syntax checks and shellcheck; JSON catalogs are valid; all art renders.
 
 ## What was NOT verified (no ISO has been booted yet)
-- **The ISO build itself.** The live-build configuration targets Debian 13's live-build and was written
-  from its documented layout, but the build tool was not available where this was written. The first
-  real build may stop on an option name or a package name. That is normal for a first build. Paste the
-  last 30 lines of `build.log` and it gets fixed in one round.
+- **Booting the ISO.** The GitHub build of the first Stage 1 project succeeded (2.5 GB ISO). Nobody has booted it yet,
+  so everything about the live session, login, panel and installer is still unverified on a screen.
 - **Booting on real hardware**: Wi-Fi, graphics, touchpads, suspend and hibernate vary by machine.
 - **The Say Bar prompt window** uses fuzzel's `--prompt-only` option; confirm it opens and returns text.
 - **Waybar icons and panel look**: written without a screenshot; expect to tweak spacing.
@@ -32,6 +30,10 @@ Written plainly so nothing surprises you.
 - **Drop** was tested with real transfers between two processes on one machine (wrong code, replayed proof, damaged file, oversize, name tricks).
   It has not yet crossed a real Wi-Fi network. Files are **not encrypted in transit** (do not send secrets over public Wi-Fi); pairing-based TLS is planned.
   Discovery uses Avahi, so a firewall must allow port 53317 on the local network.
+
+- **Users and Updates**: validation, parsing, bundle checksums and the root helper's safety rules are tested (including refusals to touch
+  system accounts or the last administrator). The commands themselves have not run against a real `apt`, `useradd` or sudo prompt yet.
+  Offline bundles prove the files are unchanged since they were made, not who made them: install only bundles you trust.
 
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.

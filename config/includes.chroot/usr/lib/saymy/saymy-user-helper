@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+"""Root helper for SayMy Settings user management. Run only through sudo (saymy_system.elevate).
+
+   saymy-user-helper add USERNAME "Full Name" --admin|--standard      (password on stdin)
+   saymy-user-helper passwd USERNAME                                  (password on stdin)
+   saymy-user-helper admin USERNAME on|off
+   saymy-user-helper delete USERNAME
+Add --dry-run to print the commands instead of running them. The helper re-validates everything itself and
+never trusts the caller: it will not touch system accounts, will not remove or demote the person who called it,
+and will not leave the computer without an administrator.
+"""
+import grp
+import os
+import pwd
+import subprocess
+import sys
+
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_system as sysm  # noqa: E402
+
+DRY = "--dry-run" in sys.argv
+ARGS = [a for a in sys.argv[1:] if a != "--dry-run"]
+PASSWD = os.environ.get("SAYMY_PASSWD", "/etc/passwd") if DRY else "/etc/passwd"
+GROUP = os.environ.get("SAYMY_GROUP", "/etc/group") if DRY else "/etc/group"
+CALLER = os.environ.get("SUDO_USER", "")
+DESKTOP_GROUPS = ["audio", "video", "plugdev", "netdev", "cdrom", "bluetooth", "scanner", "lpadmin"]
+
+
+def die(msg, code=1):
+    print(msg, file=sys.stderr)
+    sys.exit(code)
+
+
+def run(cmd, stdin=None):
+    if DRY:
+        print(" ".join(cmd))
+        return 0
+    return subprocess.run(cmd, input=stdin, text=True).returncode
+
+
+def people():
+    return {u["name"]: u for u in sysm.list_users(PASSWD, GROUP)}
+
+
+def need_person(name):
+    p = people().get(name)
+    if not p:
+        die(f"{name} is not a regular user account")
+    return p
+
+
+def admin_count():
+    return sum(u["admin"] for u in people().values())
+
+
+def password_from_stdin():
+    pw = sys.stdin.readline().rstrip("\n")
+    if not sysm.valid_password(pw):
+        die("password too short or invalid")
+    return pw
+
+
+def main():
+    if not ARGS:
+        die(__doc__, 2)
+    cmd, rest = ARGS[0], ARGS[1:]
+    if cmd == "add" and len(rest) == 3:
+        name, full, level = rest
+        if not sysm.valid_username(name):
+            die("invalid or reserved user name")
+        if level not in ("--admin", "--standard"):
+            die("level must be --admin or --standard")
+        if name in people() or (not DRY and _exists(name)):
+            die("that user name is already taken")
+        pw = password_from_stdin()
+        run(["useradd", "-m", "-s", "/bin/bash", "-c", sysm.clean_fullname(full) or name, name])
+        run(["chpasswd"], f"{name}:{pw}\n")
+        groups = [g for g in DESKTOP_GROUPS if DRY or _group_exists(g)] + (["sudo"] if level == "--admin" else [])
+        if groups:
+            run(["usermod", "-aG", ",".join(groups), name])
+    elif cmd == "passwd" and len(rest) == 1:
+        need_person(rest[0])
+        run(["chpasswd"], f"{rest[0]}:{password_from_stdin()}\n")
+    elif cmd == "admin" and len(rest) == 2 and rest[1] in ("on", "off"):
+        person = need_person(rest[0])
+        if rest[1] == "off":
+            if rest[0] == CALLER:
+                die("you cannot remove your own administrator rights")
+            if person["admin"] and admin_count() <= 1:
+                die("at least one administrator is required")
+            run(["gpasswd", "-d", rest[0], "sudo"])
+        else:
+            run(["gpasswd", "-a", rest[0], "sudo"])
+    elif cmd == "delete" and len(rest) == 1:
+        person = need_person(rest[0])
+        if rest[0] == CALLER:
+            die("you cannot remove the account you are using")
+        if person["admin"] and admin_count() <= 1:
+            die("at least one administrator is required")
+        run(["userdel", "-r", rest[0]])
+    else:
+        die("unknown command", 2)
+
+
+def _exists(name):
+    try:
+        pwd.getpwnam(name)
+        return True
+    except KeyError:
+        return False
+
+
+def _group_exists(name):
+    try:
+        grp.getgrnam(name)
+        return True
+    except KeyError:
+        return False
+
+
+if __name__ == "__main__":
+    main()

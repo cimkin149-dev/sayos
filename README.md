@@ -21,6 +21,7 @@ what has and has not been tested.
 | **Data wallet** | Panel counter of data used today; shows cost once you set your price (`saymy-data set-price 5000 UGX`). No currency is assumed |
 | **SayMy Settings** (`Super+,`) | A real GTK app: Wi-Fi, brightness, volume, power mode, Power Diary, accent colour that recolours the whole desktop (and can follow the sky), language, data price, About |
 | **Drop** | Send files to a nearby computer with no internet: the receiver shows a 6 digit code, the sender enters it. The code never crosses the network (HMAC proof), five wrong tries lock it, files are checksummed and never overwritten. `saymy-drop` or say “send a file” |
+| **Users and Updates** | Add and remove people, change passwords, administrator rights. Install updates, or **prepare an update bundle on one computer and install it on others from a USB stick** (checksum-verified). Administrator actions use a SayMy password window | 
 | **SayMy Doctor** | Ask the Say Bar “why is my wifi slow?”, “why is my battery draining?” or “check my computer”. It checks router, signal, internet, DNS, battery health, memory, disk, failed services and the clock, then explains the cause in plain language with fix buttons |
 | **Night light and screen timeout** | Real settings: `saymy-night on`, schedule and warmth, lock and sleep timers |
 | **Welcome app** | Runs once at first login: language, data price, Space, accent colour. Run it again any time with `saymy-welcome` |
@@ -43,7 +44,7 @@ On Windows PowerShell:
 docker run --rm --privileged -v ${PWD}:/src -v ${PWD}/out:/out debian:trixie bash /src/scripts/docker-entry.sh
 ```
 
-**B. GitHub builds it for you (no machine needed)**
+**B. GitHub builds it for you (no machine needed). First build succeeded: 2.5 GB ISO, about 19 minutes.**
 See [docs/BUILD-WITH-GITHUB.md](docs/BUILD-WITH-GITHUB.md). Push the project to GitHub, press *Run workflow*, download the ISO.
 
 **C. A Debian 13 machine or VM**

@@ -1,0 +1,63 @@
+#!/usr/bin/env python3
+"""Graphical password prompt for sudo (SUDO_ASKPASS). Prints the password on stdout; exit 1 if cancelled."""
+import os
+import sys
+
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import gi  # noqa: E402
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, Gtk  # noqa: E402
+
+import saymy_settings_backend as be  # noqa: E402
+from saymy_ui import css_for, label  # noqa: E402
+
+PROMPT = sys.argv[1] if len(sys.argv) > 1 else "Password"
+result = {"pw": None}
+
+
+class Prompt(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="SayMy needs your password")
+        self.set_default_size(420, -1)
+        self.set_resizable(False)
+        prov = Gtk.CssProvider()
+        css = css_for(be.load_appearance().get("accent", be.DEFAULT_ACCENT))
+        prov.load_from_string(css) if hasattr(prov, "load_from_string") else prov.load_from_data(css.encode())
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(box, f"set_margin_{m}")(26)
+        box.append(label("Administrator password", "rt"))
+        box.append(label(PROMPT.rstrip(": "), "dim", wrap=True))
+        self.entry = Gtk.PasswordEntry()
+        self.entry.set_show_peek_icon(True)
+        self.entry.connect("activate", lambda e: self.ok())
+        box.append(self.entry)
+        row = Gtk.Box(spacing=10)
+        cancel, ok = Gtk.Button(label="Cancel"), Gtk.Button(label="Continue")
+        ok.add_css_class("accent")
+        cancel.connect("clicked", lambda b: self.close())
+        ok.connect("clicked", lambda b: self.ok())
+        row.append(cancel)
+        row.append(ok)
+        box.append(row)
+        self.set_child(box)
+        self.entry.grab_focus()
+
+    def ok(self):
+        result["pw"] = self.entry.get_text()
+        self.close()
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.saymy.Askpass")
+
+    def do_activate(self):
+        Prompt(self).present()
+
+
+App().run([])
+if result["pw"] is None:
+    sys.exit(1)
+print(result["pw"])

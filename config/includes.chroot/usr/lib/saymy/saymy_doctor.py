@@ -15,6 +15,7 @@ from dataclasses import dataclass, asdict
 from pathlib import Path
 
 import saymy_settings_backend as be
+import saymy_system as sysm
 
 LEVELS = {"ok": 0, "warn": 1, "bad": 2}
 
@@ -168,11 +169,11 @@ def check_storage() -> list:
     if free_pct < 5:
         return [Finding("disk.full", "bad", f"The disk is almost full ({free_pct:.0f}% free)",
                         "Computers slow down and updates fail when the disk is full. Delete large files or clear the package cache.",
-                        {"label": "Clear package cache", "cmd": ["pkexec", "apt-get", "clean"]})]
+                        {"label": "Clear package cache", "cmd": sysm.elevate(["apt-get", "clean"])})]
     if free_pct < 12:
         return [Finding("disk.low", "warn", f"Disk space is getting low ({free_pct:.0f}% free)",
                         "Free up space before it affects speed and updates.",
-                        {"label": "Clear package cache", "cmd": ["pkexec", "apt-get", "clean"]})]
+                        {"label": "Clear package cache", "cmd": sysm.elevate(["apt-get", "clean"])})]
     return [Finding("disk.ok", "ok", "There is plenty of disk space", f"{du.free / 1e9:.0f} GB free of {du.total / 1e9:.0f} GB.")]
 
 
@@ -207,7 +208,7 @@ def check_clock() -> list:
     if ok and val == "no":
         return [Finding("time.sync", "warn", "The clock is not synchronised",
                         "A wrong clock makes websites show security errors. It corrects itself once you are online.",
-                        {"label": "Sync the clock", "cmd": ["pkexec", "timedatectl", "set-ntp", "true"]})]
+                        {"label": "Sync the clock", "cmd": sysm.elevate(["timedatectl", "set-ntp", "true"])})]
     return []
 
 
