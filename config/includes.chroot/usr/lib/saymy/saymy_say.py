@@ -235,6 +235,9 @@ SIMPLE = {
     "brightness_down": ["brightnessctl", "set", "5%-"],
     "space_study": ["saymy-space", "Study"], "space_business": ["saymy-space", "Business"],
     "space_home": ["saymy-space", "Home"], "space_developer": ["saymy-space", "Developer"],
+    "doctor_network": ["saymy-doctor", "--topic", "network"], "doctor_power": ["saymy-doctor", "--topic", "power"],
+    "doctor_slow": ["saymy-doctor", "--topic", "slow"], "doctor_all": ["saymy-doctor"],
+    "night_on": ["saymy-night", "on"], "night_off": ["saymy-night", "off"],
     "language": ["saymy-language"],
     "install": ["saymy-install"],
 }

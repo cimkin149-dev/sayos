@@ -1,0 +1,17 @@
+#!/usr/bin/env python3
+"""saymy-night on|off|status|apply   (apply = start it if enabled; used at login)"""
+import os, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_settings_backend as be
+
+cmd = sys.argv[1] if len(sys.argv) > 1 else "status"
+if cmd in ("on", "off"):
+    be.night_set(cmd == "on")
+    print("night light " + cmd)
+elif cmd == "apply":
+    be.night_apply()
+elif cmd == "status":
+    c = be.load_display()
+    print(f"night light {'on' if c['night'] else 'off'}: {c['warmth']}K from {c['start']} to {c['end']}")
+else:
+    print("usage: saymy-night on|off|status|apply", file=sys.stderr); sys.exit(2)

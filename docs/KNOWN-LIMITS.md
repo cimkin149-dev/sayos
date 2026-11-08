@@ -26,6 +26,9 @@ Written plainly so nothing surprises you.
 - **Welcome app and Spaces** were run on a virtual screen and unit tested, not yet on a real session. Spaces currently change the accent and
   notification mode; reordering apps per Space needs the desktop icon layer, which comes later.
 
+- **Doctor, night light and screen timeout**: parsing and decision logic are unit tested and the windows were screenshotted with sample data.
+  They have not yet run against a real router, battery or Wayland session. Night light uses `wlsunset`; the timers use `swayidle`.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).

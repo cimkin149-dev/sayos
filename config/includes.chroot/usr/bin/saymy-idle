@@ -1,0 +1,11 @@
+#!/usr/bin/env python3
+"""saymy-idle: start the screen lock and sleep timers using the saved setting (used at login)."""
+import os, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_settings_backend as be
+
+cmd = be.idle_cmd()
+if "--print" in sys.argv:
+    print(" ".join(cmd) or "never")
+elif cmd:
+    os.execvp(cmd[0], cmd)

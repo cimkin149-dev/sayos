@@ -141,7 +141,37 @@ class Settings(Gtk.ApplicationWindow):
         else:
             box.append(row("Brightness", "Lower brightness stretches battery life during a power cut",
                            scale(b, lambda v: bg(lambda: be.brightness_set(v), lambda r: None))))
-        box.append(row("Night light and screen timeout", "Coming in 0.2"))
+        cfg = be.load_display()
+        box.append(row("Night light", "Warms the screen in the evening, easier on the eyes",
+                       switch(cfg["night"], lambda on: bg(lambda: be.night_set(on), lambda r: None))))
+        seg = Gtk.Box(spacing=6)
+        first = None
+        for name, kelvin in be.WARMTH.items():
+            tb = Gtk.ToggleButton(label=name)
+            if first is None:
+                first = tb
+            else:
+                tb.set_group(first)
+            tb.set_active(kelvin == cfg["warmth"])
+            tb.connect("toggled", lambda w, k=kelvin: w.get_active() and bg(lambda: be.night_set(warmth=k), lambda r: None))
+            seg.append(tb)
+        box.append(row("Warmth", None, seg))
+        times = Gtk.Box(spacing=8)
+        for key in ("start", "end"):
+            e = Gtk.Entry()
+            e.set_max_length(5)
+            e.set_size_request(84, -1)
+            e.set_text(cfg[key])
+            apply = debounced(lambda k, v: be.valid_time(v) and bg(lambda: be.night_set(**{k: v}), lambda r: None), 600)
+            e.connect("changed", lambda w, k=key: apply(k, w.get_text()))
+            times.append(label("From" if key == "start" else "to", "dim"))
+            times.append(e)
+        box.append(row("Night light schedule", "Use 24 hour times like 19:00", times))
+        options = [("Never", 0), ("5 minutes", 5), ("10 minutes", 10), ("15 minutes", 15), ("30 minutes", 30)]
+        dd = Gtk.DropDown.new_from_strings([o[0] for o in options])
+        dd.set_selected(next((i for i, o in enumerate(options) if o[1] == cfg["lock_minutes"]), 2))
+        dd.connect("notify::selected", lambda w, _p: be.lock_set(options[w.get_selected()][1]))
+        box.append(row("Lock the screen after", "Then the computer sleeps 5 minutes later to save power", dd))
         return outer
 
     # ---------------------------------------------------------- Sound

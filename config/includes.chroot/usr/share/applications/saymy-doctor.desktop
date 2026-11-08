@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Doctor
+GenericName=Computer Doctor
+Comment=Find out what is wrong and how to fix it
+Exec=saymy-doctor
+Icon=utilities-system-monitor
+Categories=System;Settings;

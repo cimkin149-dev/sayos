@@ -20,6 +20,8 @@ what has and has not been tested.
 | **Power-cut guard** | Detects mains loss, switches to power saver, dims the screen, warns, saves, suspends or hibernates at low battery, and keeps a diary of every cut |
 | **Data wallet** | Panel counter of data used today; shows cost once you set your price (`saymy-data set-price 5000 UGX`). No currency is assumed |
 | **SayMy Settings** (`Super+,`) | A real GTK app: Wi-Fi, brightness, volume, power mode, Power Diary, accent colour that recolours the whole desktop (and can follow the sky), language, data price, About |
+| **SayMy Doctor** | Ask the Say Bar “why is my wifi slow?”, “why is my battery draining?” or “check my computer”. It checks router, signal, internet, DNS, battery health, memory, disk, failed services and the clock, then explains the cause in plain language with fix buttons |
+| **Night light and screen timeout** | Real settings: `saymy-night on`, schedule and warmth, lock and sleep timers |
 | **Welcome app** | Runs once at first login: language, data price, Space, accent colour. Run it again any time with `saymy-welcome` |
 | **Spaces** | `saymy-space Study` (or say “study mode”): recolours the desktop and, for Study, mutes notifications through mako |
 | **Installer** | Calamares with SayMy branding and slideshow |

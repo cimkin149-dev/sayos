@@ -1,0 +1,98 @@
+#!/usr/bin/env python3
+"""SayMy Doctor: finds what is wrong and explains it in plain language.
+
+   saymy-doctor                  open the Doctor window (checks everything)
+   saymy-doctor --topic network  focus on: network | power | slow | all
+   saymy-doctor --text           print a plain report in the terminal
+   --demo                        sample findings, for screenshots
+"""
+import os
+import subprocess
+import sys
+
+if "--demo" in sys.argv:
+    os.environ["SAYMY_DEMO"] = "1"
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_doctor as doc  # noqa: E402
+
+if "--text" in sys.argv:
+    sys.exit(doc.main(sys.argv[1:]))
+
+import gi  # noqa: E402
+gi.require_version("Gtk", "4.0")
+from gi.repository import Gdk, Gtk  # noqa: E402
+
+import saymy_settings_backend as be  # noqa: E402
+from saymy_ui import bg, css_for, label  # noqa: E402
+
+TOPIC = sys.argv[sys.argv.index("--topic") + 1] if "--topic" in sys.argv else "all"
+TITLES = {"network": "Checking your network…", "power": "Checking power and battery…",
+          "slow": "Finding out why the computer feels slow…", "all": "Checking your whole computer…"}
+ICON = {"ok": "✓", "warn": "!", "bad": "✕"}
+
+
+class Doctor(Gtk.ApplicationWindow):
+    def __init__(self, app):
+        super().__init__(application=app, title="SayMy Doctor")
+        self.set_default_size(860, 640)
+        prov = Gtk.CssProvider()
+        css = css_for(be.load_appearance().get("accent", be.DEFAULT_ACCENT))
+        prov.load_from_string(css) if hasattr(prov, "load_from_string") else prov.load_from_data(css.encode())
+        Gtk.StyleContext.add_provider_for_display(Gdk.Display.get_default(), prov, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        for m in ("top", "bottom", "start", "end"):
+            getattr(outer, f"set_margin_{m}")(32)
+        outer.append(label("SayMy Doctor", "title"))
+        self.status = label(TITLES.get(TOPIC, TITLES["all"]), "dim")
+        outer.append(self.status)
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_vexpand(True)
+        self.list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        scroller.set_child(self.list)
+        outer.append(scroller)
+        again = Gtk.Button(label="Check again")
+        again.add_css_class("accent")
+        again.set_halign(Gtk.Align.START)
+        again.connect("clicked", lambda b: self.run_checks())
+        outer.append(again)
+        self.set_child(outer)
+        self.run_checks()
+
+    def run_checks(self):
+        self.status.set_text(TITLES.get(TOPIC, TITLES["all"]))
+        bg(lambda: doc.diagnose(TOPIC), self.show)
+
+    def show(self, findings):
+        while (c := self.list.get_first_child()):
+            self.list.remove(c)
+        self.status.set_text(doc.headline(findings))
+        for f in findings:
+            box = Gtk.Box(spacing=14)
+            box.add_css_class("row")
+            icon = label(ICON[f.level], f"lv-{f.level}")
+            icon.set_valign(Gtk.Align.START)
+            box.append(icon)
+            txt = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=3)
+            txt.set_hexpand(True)
+            txt.append(label(f.title, "rt", wrap=True))
+            if f.detail:
+                txt.append(label(f.detail, "dim", wrap=True))
+            box.append(txt)
+            if f.fix:
+                b = Gtk.Button(label=f.fix["label"])
+                b.set_valign(Gtk.Align.CENTER)
+                b.connect("clicked", lambda w, cmd=f.fix["cmd"]: subprocess.Popen(cmd, start_new_session=True))
+                box.append(b)
+            self.list.append(box)
+
+
+class App(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.saymy.Doctor")
+
+    def do_activate(self):
+        (self.props.active_window or Doctor(self)).present()
+
+
+if __name__ == "__main__":
+    sys.exit(App().run([a for a in sys.argv if a in ()]))

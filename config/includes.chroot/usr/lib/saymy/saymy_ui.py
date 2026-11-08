@@ -33,6 +33,7 @@ scale slider { background: #F3E9D8; min-width: 22px; min-height: 22px; border-ra
 entry, passwordentry { background: #0C1A2A; color: #F3E9D8; border-radius: 12px; border: 1px solid #1E3A55; padding: 6px 12px; }
 .big { font-size: 36px; font-weight: 800; }
 .card-btn { padding: 14px 20px; border-radius: 16px 16px 16px 4px; }
+.lv-ok { color: #3FA66B; font-weight: 800; font-size: 20px; } .lv-warn { color: #F5B93A; font-weight: 800; font-size: 20px; } .lv-bad { color: #E0445B; font-weight: 800; font-size: 20px; }
 .swatch { min-width: 40px; min-height: 40px; padding: 0; border-radius: 999px; border: 3px solid transparent; }
 .swatch.sel { border-color: #F3E9D8; }
 """

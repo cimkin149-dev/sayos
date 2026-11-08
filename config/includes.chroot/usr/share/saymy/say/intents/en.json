@@ -185,6 +185,57 @@
     "developer space",
     "switch to developer"
    ]
+  },
+  {
+   "id": "doctor_network",
+   "patterns": [
+    "why is my wifi slow",
+    "why is the internet slow",
+    "my wifi is slow",
+    "wifi is slow",
+    "internet is slow",
+    "why is my internet slow"
+   ]
+  },
+  {
+   "id": "doctor_power",
+   "patterns": [
+    "why is my battery draining",
+    "battery drains fast",
+    "why does my battery die so fast"
+   ]
+  },
+  {
+   "id": "doctor_slow",
+   "patterns": [
+    "why is my computer slow",
+    "my computer is slow",
+    "computer is slow"
+   ]
+  },
+  {
+   "id": "doctor_all",
+   "patterns": [
+    "check my computer",
+    "fix my computer",
+    "doctor",
+    "run diagnostics"
+   ]
+  },
+  {
+   "id": "night_on",
+   "patterns": [
+    "night light on",
+    "turn on night light",
+    "night light"
+   ]
+  },
+  {
+   "id": "night_off",
+   "patterns": [
+    "night light off",
+    "turn off night light"
+   ]
   }
  ]
 }

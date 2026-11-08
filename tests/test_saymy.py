@@ -24,6 +24,7 @@ import saymy_say as say        # noqa: E402
 import saymy_power as power    # noqa: E402
 import saymy_data as data      # noqa: E402
 import saymy_settings_backend as sb  # noqa: E402
+import saymy_doctor as doc  # noqa: E402
 
 
 class SayBar(unittest.TestCase):
@@ -329,6 +330,98 @@ class SpacesAndWelcome(unittest.TestCase):
         done = sb.apply_welcome({"lang": "en", "price": "abc", "cur": "", "space": "Home", "accent": None, "follow": False}, reload=False)
         self.assertNotIn("price", done)
         self.assertNotIn("accent", done)
+
+
+class Doctor(unittest.TestCase):
+    def test_parse_ping(self):
+        out = "3 packets transmitted, 3 received, 0% packet loss, time 2003ms\nrtt min/avg/max/mdev = 1.2/3.4/5.6/0.8 ms"
+        self.assertEqual(doc.parse_ping(out), (0.0, 3.4))
+        self.assertEqual(doc.parse_ping("3 packets transmitted, 0 received, 100% packet loss"), (100.0, None))
+        self.assertEqual(doc.parse_ping("nonsense"), (None, None))
+
+    def test_gateway_and_memory_and_units(self):
+        self.assertEqual(doc.default_gateway("default via 192.168.1.1 dev wlan0 proto dhcp"), "192.168.1.1")
+        self.assertIsNone(doc.default_gateway(""))
+        info = doc.parse_meminfo("MemTotal:  8000000 kB\nMemAvailable:  800000 kB\n")
+        self.assertEqual((info["MemTotal"], info["MemAvailable"]), (8000000, 800000))
+        self.assertEqual(doc.parse_failed_units("bluetooth.service loaded failed failed Bluetooth\n● cups.service loaded failed failed CUPS"),
+                         ["bluetooth.service", "cups.service"])
+        self.assertEqual(doc.parse_top_memory("COMMAND %MEM\nfirefox-esr 12.5\nCode 3.1\nbash 0.2", 2), [("firefox-esr", 12.5), ("Code", 3.1)])
+
+    def test_battery_health(self):
+        d = Path(tempfile.mkdtemp()) / "BAT0"
+        d.mkdir()
+        (d / "type").write_text("Battery")
+        (d / "energy_full").write_text("30000000")
+        (d / "energy_full_design").write_text("40000000")
+        self.assertEqual(doc.battery_health(d.parent), 75)
+        self.assertIsNone(doc.battery_health(Path("/nonexistent")))
+
+    def test_headline_and_report(self):
+        F = doc.Finding
+        self.assertEqual(doc.headline([F("a", "ok", "fine")]), "Everything looks healthy")
+        self.assertEqual(doc.headline([F("a", "bad", "x"), F("b", "warn", "y"), F("c", "warn", "z")]), "1 problem found and 2 warnings")
+        self.assertIn("[PROBLEM] x", doc.text_report([F("a", "bad", "x", "detail")]))
+
+    def test_demo_and_sorting(self):
+        os.environ["SAYMY_DEMO"] = "1"
+        try:
+            f = doc.diagnose("network")
+            self.assertTrue(any(x.level == "warn" for x in f))
+        finally:
+            del os.environ["SAYMY_DEMO"]
+
+    def test_a_crashing_check_does_not_hide_others(self):
+        def boom():
+            raise RuntimeError("kaput")
+        original = doc.TOPICS["slow"]
+        doc.TOPICS["slow"] = [boom, doc.check_storage]
+        try:
+            f = doc.diagnose("slow")
+            self.assertTrue(any("kaput" in x.detail for x in f))
+            self.assertTrue(any(x.id.startswith("disk.") for x in f))
+        finally:
+            doc.TOPICS["slow"] = original
+
+    def test_say_bar_doctor_intents(self):
+        for phrase, topic in (("why is my wifi slow", "network"), ("why is my battery draining", "power"), ("my computer is slow", "slow")):
+            self.assertEqual(say.handle(phrase, "en").exec, ["saymy-doctor", "--topic", topic])
+        self.assertEqual(say.handle("check my computer", "en").exec, ["saymy-doctor"])
+
+
+class NightAndIdle(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["XDG_CONFIG_HOME"] = self.tmp
+        os.environ["SAYMY_DEMO"] = "1"        # never start real processes in tests
+
+    def tearDown(self):
+        del os.environ["XDG_CONFIG_HOME"], os.environ["SAYMY_DEMO"]
+
+    def test_night_command(self):
+        cfg = dict(sb.DISPLAY_DEFAULT, night=True, warmth=3200, start="20:30", end="05:45")
+        self.assertEqual(sb.night_cmd(cfg), ["wlsunset", "-t", "3200", "-T", "6500", "-S", "05:45", "-s", "20:30"])
+
+    def test_night_set_and_validation(self):
+        cfg = sb.night_set(True, warmth=4500, start="18:00")
+        self.assertEqual((cfg["night"], cfg["warmth"], cfg["start"]), (True, 4500, "18:00"))
+        self.assertEqual(sb.load_display()["start"], "18:00")
+        with self.assertRaises(ValueError):
+            sb.night_set(start="25:99")
+        for ok, bad in (("00:00", "24:00"), ("23:59", "7:5"), ("06:30", "abc")):
+            self.assertTrue(sb.valid_time(ok))
+            self.assertFalse(sb.valid_time(bad))
+
+    def test_idle_command(self):
+        self.assertEqual(sb.idle_cmd(dict(sb.DISPLAY_DEFAULT, lock_minutes=10)),
+                         ["swayidle", "-w", "timeout", "600", "saymy-lock", "timeout", "900", "systemctl suspend"])
+        self.assertEqual(sb.idle_cmd(dict(sb.DISPLAY_DEFAULT, lock_minutes=0)), [])
+        sb.lock_set(5)
+        self.assertEqual(sb.load_display()["lock_minutes"], 5)
+
+    def test_say_bar_night_light(self):
+        self.assertEqual(say.handle("turn on night light", "en").exec, ["saymy-night", "on"])
+        self.assertEqual(say.handle("night light off", "en").exec, ["saymy-night", "off"])
 
 
 class Sky(unittest.TestCase):

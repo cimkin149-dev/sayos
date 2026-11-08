@@ -137,6 +137,88 @@ def mute_set(on: bool):
     return run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1" if on else "0"])[0]
 
 
+# ------------------------------------------------------------------ night light and screen timeout
+DISPLAY_DEFAULT = {"night": False, "warmth": 4000, "start": "19:00", "end": "06:00", "lock_minutes": 10}
+WARMTH = {"Soft": 4500, "Warm": 4000, "Very warm": 3200}
+
+
+def display_path() -> Path:
+    return i18n.config_dir() / "display.json"
+
+
+def load_display() -> dict:
+    cfg = dict(DISPLAY_DEFAULT)
+    try:
+        cfg.update(json.loads(display_path().read_text()))
+    except (OSError, ValueError):
+        pass
+    return cfg
+
+
+def save_display(cfg: dict):
+    display_path().parent.mkdir(parents=True, exist_ok=True)
+    display_path().write_text(json.dumps(cfg))
+
+
+def valid_time(value: str) -> bool:
+    return bool(re.fullmatch(r"([01]\d|2[0-3]):[0-5]\d", value or ""))
+
+
+def night_cmd(cfg: dict) -> list:
+    """wlsunset warms the screen after sunset time and returns it to normal at sunrise time."""
+    return ["wlsunset", "-t", str(int(cfg["warmth"])), "-T", "6500", "-S", cfg["end"], "-s", cfg["start"]]
+
+
+def night_apply(cfg: dict = None, reload: bool = True):
+    cfg = cfg or load_display()
+    if not reload or demo():
+        return night_cmd(cfg) if cfg["night"] else None
+    run(["pkill", "-x", "wlsunset"])
+    if cfg["night"]:
+        subprocess.Popen(night_cmd(cfg), start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return night_cmd(cfg) if cfg["night"] else None
+
+
+def night_set(on: bool = None, **changes) -> dict:
+    cfg = load_display()
+    if on is not None:
+        cfg["night"] = on
+    for k in ("warmth", "start", "end"):
+        if k in changes:
+            if k != "warmth" and not valid_time(changes[k]):
+                raise ValueError("time must look like 19:30")
+            cfg[k] = changes[k]
+    save_display(cfg)
+    night_apply(cfg)
+    return cfg
+
+
+def idle_cmd(cfg: dict = None) -> list:
+    """swayidle: lock after N minutes, sleep 5 minutes later. 0 means never."""
+    cfg = cfg or load_display()
+    n = int(cfg.get("lock_minutes", 10))
+    if n <= 0:
+        return []
+    return ["swayidle", "-w", "timeout", str(n * 60), "saymy-lock", "timeout", str((n + 5) * 60), "systemctl suspend"]
+
+
+def idle_apply(cfg: dict = None, reload: bool = True):
+    cmd = idle_cmd(cfg)
+    if reload and not demo():
+        run(["pkill", "-x", "swayidle"])
+        if cmd:
+            subprocess.Popen(cmd, start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return cmd
+
+
+def lock_set(minutes: int) -> dict:
+    cfg = load_display()
+    cfg["lock_minutes"] = max(0, int(minutes))
+    save_display(cfg)
+    idle_apply(cfg)
+    return cfg
+
+
 # ------------------------------------------------------------------ power
 PROFILES = ["power-saver", "balanced", "performance"]
 
