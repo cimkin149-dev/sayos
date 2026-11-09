@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""Root helper for Safe Updates. Run only through sudo (saymy_system.elevate).
+
+   saymy-update-helper apply                 install all pending updates, keeping the old versions for Undo
+   saymy-update-helper apply-bundle FOLDER   same, from a verified offline bundle
+   saymy-update-helper undo ID               restore the versions kept before update ID
+   saymy-update-helper release-holds         let held-back packages update again
+Prints PROGRESS: lines for the window and a final RESULT: {json} line.
+"""
+import json
+import os
+import shutil
+import sys
+
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_power       # noqa: E402
+import saymy_safeupdate as su  # noqa: E402
+import saymy_system as sysm    # noqa: E402
+
+NONINTERACTIVE = ["env", "DEBIAN_FRONTEND=noninteractive"]
+
+
+def out(line):
+    print(line, flush=True)
+
+
+def main(argv):
+    if not argv:
+        out(__doc__)
+        return 2
+    cmd, rest = argv[0], argv[1:]
+    if cmd in ("apply", "apply-bundle"):
+        if cmd == "apply":
+            rc, text = su.real_sh(["apt", "list", "--upgradable"])
+            names = [u["name"] for u in sysm.parse_upgradable(text)]
+            upgrade = NONINTERACTIVE + ["apt-get", "-y", "upgrade"]
+        else:
+            folder = rest[0] if rest else ""
+            problems = sysm.verify_bundle(folder)
+            if problems:
+                out("PROGRESS: This bundle cannot be installed: " + "; ".join(problems))
+                out("RESULT: " + json.dumps({"ok": False, "stage": "bundle", "problems": problems}))
+                return 1
+            manifest = json.loads(open(os.path.join(folder, "manifest.json")).read())
+            names = [p["name"] for p in manifest["packages"]]
+            debs = [os.path.join(folder, p["file"]) for p in manifest["packages"]]
+            upgrade = NONINTERACTIVE + ["apt-get", "install", "-y", "--no-download"] + debs
+        if not names:
+            out("PROGRESS: Nothing to update.")
+            out("RESULT: " + json.dumps({"ok": True, "stage": "none"}))
+            return 0
+        res = su.apply_updates(su.real_sh, names, upgrade, saymy_power.read_state(),
+                               shutil.disk_usage("/var/lib").free, on_line=out)
+        out("RESULT: " + json.dumps(res))
+        return 0 if res["ok"] else 1
+    if cmd == "undo" and rest:
+        res = su.undo(su.real_sh, rest[0], on_line=out)
+        out("RESULT: " + json.dumps(res))
+        return 0 if res["ok"] else 1
+    if cmd == "release-holds":
+        su.release_holds(su.real_sh, on_line=out)
+        return 0
+    out("unknown command")
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

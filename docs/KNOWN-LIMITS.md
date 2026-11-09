@@ -35,6 +35,10 @@ Written plainly so nothing surprises you.
   system accounts or the last administrator). The commands themselves have not run against a real `apt`, `useradd` or sudo prompt yet.
   Offline bundles prove the files are unchanged since they were made, not who made them: install only bundles you trust.
 
+- **Safe Updates**: the logic is tested against a fake system (blocked starts, kept versions, failures after an update, undo, damaged copies, pruning).
+  It has not yet run against a real `dpkg-repack`, `apt-get` or a real downgrade. Test Undo on a spare machine or VM before trusting it.
+  Whole-system snapshots (Btrfs) are on the roadmap; v0.1 undoes package versions only.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).

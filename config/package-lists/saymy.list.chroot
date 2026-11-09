@@ -57,6 +57,9 @@ qt6-wayland
 xdg-desktop-portal-wlr
 xdg-desktop-portal-gtk
 
+# --- Safe Updates (keeps old package versions so an update can be undone)
+dpkg-repack
+
 # --- Drop (nearby sharing discovery)
 avahi-daemon
 avahi-utils

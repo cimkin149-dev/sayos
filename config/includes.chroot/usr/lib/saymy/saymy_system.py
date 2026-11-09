@@ -17,6 +17,7 @@ from pathlib import Path
 import saymy_settings_backend as be
 
 HELPER = "/usr/lib/saymy/saymy-user-helper"
+UPDATE_HELPER = "/usr/lib/saymy/saymy-update-helper"
 ASKPASS = "/usr/bin/saymy-askpass"
 USERNAME_RE = re.compile(r"^[a-z][a-z0-9_-]{0,30}$")
 RESERVED = {"root", "daemon", "bin", "sys", "sync", "games", "man", "lp", "mail", "news", "uucp", "proxy", "www-data",
@@ -163,6 +164,65 @@ def install_updates(on_line=None, runner=None):
     for ln in p.stdout:
         on_line and on_line(ln.rstrip())
     return p.wait() == 0
+
+
+# ------------------------------------------------------------------ safe updates (with Undo)
+def _stream(cmd, on_line=None, runner=None):
+    """Run the root helper, forward its lines, and return (ok, RESULT dict)."""
+    result, ok = {}, False
+    if runner:
+        ok0, text = _run(cmd, runner)
+        lines, ok = text.splitlines(), ok0
+    else:
+        try:
+            p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        except OSError as exc:
+            on_line and on_line(str(exc))
+            return False, {"ok": False, "error": str(exc)}
+        lines = (ln.rstrip() for ln in p.stdout)
+    for ln in lines:
+        if ln.startswith("RESULT: "):
+            try:
+                result = json.loads(ln[8:])
+            except ValueError:
+                pass
+        elif on_line:
+            on_line(ln[10:] if ln.startswith("PROGRESS: ") else ln)
+    if not runner:
+        ok = p.wait() == 0
+    return ok and result.get("ok", True), result
+
+
+def safe_apply(on_line=None, bundle=None, runner=None):
+    args = ["apply-bundle", bundle] if bundle else ["apply"]
+    return _stream(elevate([UPDATE_HELPER, *args]), on_line, runner)
+
+
+def safe_undo(txn_id, on_line=None, runner=None):
+    return _stream(elevate([UPDATE_HELPER, "undo", txn_id]), on_line, runner)
+
+
+def undo_list() -> list:
+    import saymy_safeupdate as su
+    if be.demo():
+        return [{"id": "20261108-170500", "when": "08 Nov 2026, 17:05", "count": 14, "status": "installed", "ok": True,
+                 "new_failures": ["bluetooth.service"], "kernel": False, "undoable": True},
+                {"id": "20261101-090200", "when": "01 Nov 2026, 09:02", "count": 6, "status": "installed", "ok": True,
+                 "new_failures": [], "kernel": True, "undoable": True}]
+    return su.summary(su.load_journal())
+
+
+def update_blockers() -> list:
+    """Messages that should stop the Install button right now (power, disk, half-finished installs)."""
+    import saymy_power
+    import saymy_safeupdate as su
+    if be.demo():
+        return []
+    def sh(cmd, cwd=None):
+        ok, text = _run(cmd)
+        return (0 if ok else 1), text
+
+    return [p["message"] for p in su.precheck(sh, saymy_power.read_state(), shutil.disk_usage("/var/lib").free) if p["blocking"]]
 
 
 # ------------------------------------------------------------------ offline update bundles

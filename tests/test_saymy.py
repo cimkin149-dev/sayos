@@ -28,6 +28,7 @@ import saymy_settings_backend as sb  # noqa: E402
 import saymy_doctor as doc  # noqa: E402
 import saymy_drop as drop  # noqa: E402
 import saymy_system as sysm  # noqa: E402
+import saymy_safeupdate as su  # noqa: E402
 
 
 class SayBar(unittest.TestCase):
@@ -682,6 +683,145 @@ class UserHelper(unittest.TestCase):
         self.assertEqual((rc, out.strip()), (0, "userdel -r grace"))
         self.assertEqual(self.helper("admin", "grace", "on")[1].strip(), "gpasswd -a grace sudo")
         self.assertEqual(self.helper("passwd", "grace", stdin="newpassword\n")[1].strip(), "chpasswd")
+
+
+
+class FakeSh:
+    """Fake system for Safe Updates: tracks installed packages, failed services and every command run."""
+    def __init__(self, installed=None, audit="", check_rc=0, upgrade_rc=0, failed=("", "")):
+        self.calls, self.installed, self.audit, self.check_rc, self.upgrade_rc = [], dict(installed or {}), audit, check_rc, upgrade_rc
+        self.failed = list(failed)
+
+    def ran(self, word):
+        return [c for c in self.calls if word in c]
+
+    def __call__(self, cmd, cwd=None):
+        self.calls.append(cmd)
+        if cmd[:2] == ["dpkg", "--audit"]:
+            return 0, self.audit
+        if cmd[:2] == ["apt-get", "check"]:
+            return self.check_rc, ""
+        if cmd[0] == "systemctl":
+            return 0, (self.failed.pop(0) if len(self.failed) > 1 else self.failed[0])
+        if cmd[0] == "dpkg-query":
+            v = self.installed.get(cmd[-1])
+            return (0, f"install ok installed|{v}|amd64") if v else (1, "")
+        if cmd[0] == "dpkg-repack":
+            (Path(cwd) / f"{cmd[1]}_{self.installed[cmd[1]]}_amd64.deb").write_bytes(f"old {cmd[1]} {self.installed[cmd[1]]}".encode())
+            return 0, ""
+        if "upgrade" in cmd:
+            return self.upgrade_rc, "Setting up things...\nDone."
+        if "--allow-downgrades" in cmd:
+            return 0, "Downgraded."
+        return 0, ""
+
+
+GOOD_POWER = {"ac": True, "battery_pct": 80}
+
+
+class SafeUpdates(unittest.TestCase):
+    def setUp(self):
+        self.d = Path(tempfile.mkdtemp())
+        self.lines = []
+
+    def run_update(self, sh, names=("labwc", "waybar"), power=GOOD_POWER, free=10 * 10 ** 9, now=None):
+        return su.apply_updates(sh, list(names), ["apt-get", "-y", "upgrade"], power, free, on_line=self.lines.append, d=self.d, now=now)
+
+    def test_precheck_blocks_unsafe_conditions(self):
+        ok = lambda **k: su.precheck(FakeSh(**k), k.get("power", GOOD_POWER), 10 ** 10)
+        self.assertEqual(su.precheck(FakeSh(), GOOD_POWER, 10 ** 10), [])
+        self.assertTrue(any("charger" in p["message"] for p in su.precheck(FakeSh(), {"ac": False, "battery_pct": 30}, 10 ** 10)))
+        self.assertEqual(su.precheck(FakeSh(), {"ac": False, "battery_pct": 70}, 10 ** 10), [])      # battery above 50% is fine
+        self.assertEqual(su.precheck(FakeSh(), {"ac": None, "battery_pct": None}, 10 ** 10), [])      # desktop with no battery
+        self.assertTrue(any("disk space" in p["message"] for p in su.precheck(FakeSh(), GOOD_POWER, 10 ** 9)))
+        self.assertTrue(any("did not finish" in p["message"] for p in su.precheck(FakeSh(audit="foo half-installed"), GOOD_POWER, 10 ** 10)))
+        self.assertTrue(any("apt-get check" in p["message"] for p in su.precheck(FakeSh(check_rc=100), GOOD_POWER, 10 ** 10)))
+
+    def test_blocked_update_changes_nothing(self):
+        sh = FakeSh(installed={"labwc": "0.8.2-1"})
+        res = self.run_update(sh, power={"ac": False, "battery_pct": 20})
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["stage"], "precheck")
+        self.assertEqual(sh.ran("upgrade"), [])
+        self.assertEqual(su.load_journal(self.d), [])
+
+    def test_successful_update_keeps_old_versions(self):
+        sh = FakeSh(installed={"labwc": "0.8.2-1", "waybar": "0.12.0-1"})
+        res = self.run_update(sh, names=("labwc", "waybar", "brandnew"), now=1_700_000_000)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["kept"], 2)
+        j = su.load_journal(self.d)
+        self.assertEqual([p["name"] for p in j[0]["packages"]], ["labwc", "waybar"])
+        self.assertEqual(j[0]["new_packages"], ["brandnew"])
+        kept = self.d / j[0]["id"] / j[0]["packages"][0]["file"]
+        self.assertEqual(kept.read_bytes(), b"old labwc 0.8.2-1")
+        # the old version was copied BEFORE the upgrade ran
+        self.assertLess(sh.calls.index(["dpkg-repack", "labwc"]), sh.calls.index(["apt-get", "-y", "upgrade"]))
+
+    def test_new_service_failures_are_reported(self):
+        sh = FakeSh(installed={"labwc": "1"}, failed=("cups.service loaded failed", "cups.service loaded failed\nsddm.service loaded failed"))
+        res = self.run_update(sh, names=("labwc",))
+        self.assertEqual(res["new_failures"], ["sddm.service"])        # cups was already failing, so it is not blamed on the update
+        self.assertTrue(any("sddm.service" in l for l in self.lines))
+
+    def test_failed_upgrade_is_still_undoable(self):
+        sh = FakeSh(installed={"labwc": "1"}, upgrade_rc=100)
+        res = self.run_update(sh, names=("labwc",))
+        self.assertFalse(res["ok"])
+        self.assertTrue(su.summary(su.load_journal(self.d))[0]["undoable"])
+
+    def test_undo_restores_and_holds(self):
+        sh = FakeSh(installed={"labwc": "0.8.2-1"})
+        res = self.run_update(sh, names=("labwc",))
+        out = su.undo(sh, res["txn"], on_line=self.lines.append, d=self.d)
+        self.assertTrue(out["ok"])
+        cmd = sh.ran("--allow-downgrades")[0]
+        self.assertIn("--no-download", cmd)
+        self.assertTrue(any(a.endswith("labwc_0.8.2-1_amd64.deb") for a in cmd))
+        self.assertEqual(sh.ran("hold")[0][-1], "labwc")
+        self.assertEqual(su.load_journal(self.d)[0]["status"], "undone")
+        self.assertFalse(su.undo(sh, res["txn"], on_line=self.lines.append, d=self.d)["ok"])   # cannot undo twice
+        # the next update releases the hold first
+        self.run_update(sh, names=("labwc",), now=1_800_000_000)
+        self.assertTrue(sh.ran("unhold"))
+
+    def test_undo_refuses_damaged_kept_copy(self):
+        sh = FakeSh(installed={"labwc": "0.8.2-1"})
+        res = self.run_update(sh, names=("labwc",))
+        for f in (self.d / res["txn"]).glob("*.deb"):
+            f.write_bytes(b"tampered")
+        before = len(sh.calls)
+        out = su.undo(sh, res["txn"], on_line=self.lines.append, d=self.d)
+        self.assertFalse(out["ok"])
+        self.assertIn("damaged", out["error"])
+        self.assertEqual(len(sh.calls), before)                          # nothing was run
+        self.assertFalse(su.undo(sh, "nope", d=self.d)["ok"])
+
+    def test_only_the_last_three_updates_are_kept(self):
+        sh = FakeSh(installed={"labwc": "1"})
+        ids = [self.run_update(sh, names=("labwc",), now=1_700_000_000 + i * 86400)["txn"] for i in range(5)]
+        j = su.load_journal(self.d)
+        self.assertEqual([e["id"] for e in j], ids[-3:])
+        for old in ids[:2]:
+            self.assertFalse((self.d / old).exists())                    # disk space is reclaimed
+
+    def test_kernel_flag_and_summary(self):
+        sh = FakeSh(installed={"linux-image-amd64": "6.12.1"})
+        res = self.run_update(sh, names=("linux-image-amd64",))
+        self.assertTrue(res["kernel"])
+        s = su.summary(su.load_journal(self.d))[0]
+        self.assertTrue(s["kernel"] and s["undoable"])
+
+    def test_sysm_streams_helper_output_and_result(self):
+        lines = []
+        fr = FakeRun(out="PROGRESS: step one\nsome apt line\nRESULT: {\"ok\": true, \"kept\": 3}")
+        ok, res = sysm.safe_apply(on_line=lines.append, runner=fr)
+        self.assertTrue(ok)
+        self.assertEqual(res["kept"], 3)
+        self.assertEqual(lines, ["step one", "some apt line"])
+        self.assertEqual(fr.calls[0]["cmd"][-2:], [sysm.UPDATE_HELPER, "apply"])
+        ok, _ = sysm.safe_undo("2026", runner=FakeRun(out="RESULT: {\"ok\": false}"))
+        self.assertFalse(ok)
 
 
 

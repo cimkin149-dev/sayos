@@ -451,7 +451,6 @@ class Settings(Gtk.ApplicationWindow):
         self.up_status = label("Checking for updates…", "dim", wrap=True)
         box.append(self.up_status)
         self.up_list = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        box.append(self.up_list)
         btns = Gtk.Box(spacing=10)
         check = Gtk.Button(label="Check for updates")
         check.connect("clicked", lambda b: self.up_check())
@@ -462,6 +461,7 @@ class Settings(Gtk.ApplicationWindow):
         btns.append(check)
         btns.append(self.install_btn)
         box.append(btns)
+        box.append(self.up_list)
         self.log = Gtk.TextView(editable=False, monospace=True, cursor_visible=False)
         self.log_scroll = Gtk.ScrolledWindow()
         self.log_scroll.set_min_content_height(160)
@@ -486,26 +486,46 @@ class Settings(Gtk.ApplicationWindow):
 
     def up_refresh(self):
         import saymy_system as sysm
-        bg(sysm.check_updates, self.up_show)
+        bg(lambda: (sysm.check_updates(), sysm.update_blockers(), sysm.undo_list()), self.up_show)
 
-    def up_show(self, ups):
+    def up_show(self, data):
         import saymy_system as sysm
+        ups, blockers, history = data
         while (c := self.up_list.get_first_child()):
             self.up_list.remove(c)
         age = sysm.lists_age_hours()
         when = "" if age is None else f" Package lists were refreshed {age} hours ago." if age else " Package lists are fresh."
-        if not ups:
-            self.up_status.set_text("Your computer is up to date." + when)
-            self.install_btn.set_sensitive(False)
-            return
         sec = sum(u["security"] for u in ups)
-        self.up_status.set_text(f"{len(ups)} updates available" + (f", {sec} for security." if sec else ".") + when)
-        self.install_btn.set_sensitive(True)
-        for u in ups[:10]:
-            tag = label("Security", "bad") if u["security"] else label("", "dim")
-            self.up_list.append(row(u["name"], f"{u['old']} → {u['new']}", tag))
-        if len(ups) > 10:
-            self.up_list.append(label(f"…and {len(ups) - 10} more", "dim"))
+        if blockers:
+            self.up_status.set_text("Updates cannot start yet. " + " ".join(blockers))
+        elif not ups:
+            self.up_status.set_text("Your computer is up to date." + when)
+        else:
+            self.up_status.set_text(f"{len(ups)} updates available" + (f", {sec} for security." if sec else ".") + when +
+                                    " Before installing, SayMy keeps the old versions so you can undo.")
+        self.install_btn.set_sensitive(bool(ups) and not blockers)
+        for u in ups[:8]:
+            self.up_list.append(row(u["name"], f"{u['old']} → {u['new']}", label("Security", "bad") if u["security"] else label("", "dim")))
+        if len(ups) > 8:
+            self.up_list.append(label(f"…and {len(ups) - 8} more", "dim"))
+        if history:
+            head = label("Recent updates: you can undo them", "rt")
+            head.set_margin_top(18)
+            head.set_margin_bottom(8)
+            self.up_list.append(head)
+        for e in history:
+            broke = bool(e["new_failures"]) or not e["ok"]
+            sub = ("Something failed afterwards: " + ", ".join(e["new_failures"]) if e["new_failures"]
+                   else "The update did not finish cleanly" if not e["ok"] else "Everything stayed healthy")
+            sub += f" · {e['count']} packages kept" + (" · includes a kernel; the old one stays in the boot menu" if e["kernel"] else "")
+            if e["undoable"]:
+                b = Gtk.Button(label="Undo this update")
+                if broke:
+                    b.add_css_class("accent")
+                b.connect("clicked", lambda w, i=e["id"]: self.up_undo(i))
+            else:
+                b = label("Undone", "dim")
+            self.up_list.append(row(e["when"], sub, b))
 
     def up_check(self):
         import saymy_system as sysm
@@ -518,16 +538,33 @@ class Settings(Gtk.ApplicationWindow):
         adj = self.log_scroll.get_vadjustment()
         adj.set_value(adj.get_upper())
 
-    def up_install(self):
-        import saymy_system as sysm
+    def run_safe(self, start_text, fn, describe):
         self.install_btn.set_sensitive(False)
         self.log.get_buffer().set_text("")
         self.log_scroll.set_visible(True)
-        self.up_status.set_text("Installing updates. Please keep the computer on and plugged in.")
+        self.up_status.set_text(start_text)
         def work():
-            ok = sysm.install_updates(lambda ln: GLib.idle_add(self.append_log, ln))
-            GLib.idle_add(lambda: (self.up_status.set_text("Updates installed." if ok else "The update did not finish. Check the details below."), self.up_refresh()))
+            ok, res = fn(lambda ln: GLib.idle_add(self.append_log, ln))
+            GLib.idle_add(lambda: (self.up_status.set_text(describe(ok, res)), self.up_refresh()))
         threading.Thread(target=work, daemon=True).start()
+
+    def up_install(self):
+        import saymy_system as sysm
+        def describe(ok, res):
+            if res.get("stage") == "precheck":
+                return "Not started: " + " ".join(res.get("problems", []))
+            if ok and res.get("new_failures"):
+                return "Updated, but something failed afterwards. You can undo it below."
+            if ok:
+                return "Updated. Everything is healthy." + (" Restart to finish the kernel update." if res.get("kernel") else "")
+            return "The update did not finish cleanly. You can undo it below."
+        self.run_safe("Installing updates safely. Old versions are kept first. Keep the computer on and plugged in.", lambda cb: sysm.safe_apply(cb), describe)
+
+    def up_undo(self, txn):
+        import saymy_system as sysm
+        self.confirm("Undo this update? The previous versions come back, and those packages stay held back until you install updates again.", "Undo",
+                     lambda: self.run_safe("Restoring the previous versions…", lambda cb: sysm.safe_undo(txn, cb),
+                                           lambda ok, res: "Restored the previous versions." + (" Restart to use the previous kernel." if ok and res.get("kernel") else "") if ok else res.get("error", "Could not undo this update.")))
 
     def up_prepare(self, folder):
         import saymy_system as sysm
@@ -540,8 +577,9 @@ class Settings(Gtk.ApplicationWindow):
         if problems:
             return self.up_status.set_text("This bundle cannot be installed: " + "; ".join(problems))
         n = len(sysm.json.loads((sysm.Path(folder) / "manifest.json").read_text())["packages"])
-        self.confirm(f"Install {n} packages from this bundle as administrator?", "Install",
-                     lambda: bg(lambda: sysm.install_bundle(folder), lambda r: (self.up_status.set_text("Bundle installed." if r[0] else "Install failed: " + r[1][-300:]), self.up_refresh())))
+        self.confirm(f"Install {n} packages from this bundle as administrator? Old versions are kept so you can undo.", "Install",
+                     lambda: self.run_safe("Installing the bundle safely…", lambda cb: sysm.safe_apply(cb, bundle=folder),
+                                           lambda ok, res: "Bundle installed. You can undo it below." if ok else "Not installed. " + " ".join(res.get("problems", [])) or "The bundle did not install."))
 
     # ---------------------------------------------------------- About
     def about(self):
