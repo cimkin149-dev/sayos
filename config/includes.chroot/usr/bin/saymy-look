@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""saymy-look list | show | apply NAME | export NAME FILE | import FILE | mode dark|light | panel top|bottom [HEIGHT]"""
+import os, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_looks as lk
+import saymy_settings_backend as be
+
+a = sys.argv[1:]
+try:
+    if not a or a[0] == "list":
+        print("\n".join(lk.PRESETS))
+    elif a[0] == "show":
+        print(lk.current_look())
+    elif a[0] == "apply" and len(a) == 2:
+        look = lk.PRESETS.get(a[1]) or lk.PRESETS.get(a[1].title())
+        if not look:
+            raise ValueError("unknown Look; try: " + ", ".join(lk.PRESETS))
+        print("applied", lk.apply_look(look)["name"])
+    elif a[0] == "export" and len(a) == 3:
+        print("saved", lk.export_look(a[2], a[1])["name"], "to", a[2])
+    elif a[0] == "import" and len(a) == 2:
+        print("applied", lk.import_look(a[1])["name"])
+    elif a[0] == "mode" and len(a) == 2:
+        lk.apply_mode(a[1]); print("mode", a[1])
+    elif a[0] == "panel" and len(a) >= 2:
+        lk.apply_panel(a[1], int(a[2]) if len(a) > 2 else 46); print("panel", a[1])
+    else:
+        print(__doc__); sys.exit(2)
+except (ValueError, OSError) as exc:
+    print(exc, file=sys.stderr); sys.exit(1)

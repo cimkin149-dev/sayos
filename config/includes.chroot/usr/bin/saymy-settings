@@ -18,6 +18,7 @@ from gi.repository import GLib, Gtk, Gdk  # noqa: E402
 
 import saymy_i18n as i18n              # noqa: E402
 import saymy_settings_backend as be    # noqa: E402
+import saymy_looks as looks            # noqa: E402
 
 from saymy_ui import CSS, css_for, bg, debounced, label, row, switch, scale, page  # noqa: E402,F401
 
@@ -235,8 +236,77 @@ class Settings(Gtk.ApplicationWindow):
         box.append(row("Follow the sky", "The accent shifts gently from sunrise to night, with the wallpaper",
                        switch(bool(cfg.get("follow_sky")), self.set_follow)))
         self.appearance_status = label("", "dim")
+
+        def segment(options, current, on_pick):
+            seg = Gtk.Box(spacing=6)
+            first = None
+            for key, text in options:
+                tb = Gtk.ToggleButton(label=text)
+                if first is None:
+                    first = tb
+                else:
+                    tb.set_group(first)
+                tb.set_active(key == current)
+                tb.connect("toggled", lambda w, k=key: w.get_active() and on_pick(k))
+                seg.append(tb)
+            return seg
+
+        def run(fn, note):
+            def done(res):
+                self.apply_css()
+                self.appearance_status.set_text(note)
+            bg(fn, done)
+        mode = cfg.get("mode", "dark")
+        box.append(row("Theme", "Light or dark windows, panel and launcher", segment([("dark", "Dark"), ("light", "Light")], mode,
+                   lambda m: run(lambda: looks.apply_mode(m), "Theme changed. Open apps pick it up when restarted."))))
+        box.append(row("Panel position", None, segment([("bottom", "Bottom"), ("top", "Top")], cfg.get("panel_position", "bottom"),
+                   lambda pos: run(lambda: looks.apply_panel(pos, cfg.get("panel_height", 46)), "Panel moved."))))
+        height = cfg.get("panel_height", 46)
+        nearest = min(looks.SIZES, key=lambda k: abs(looks.SIZES[k] - height))
+        box.append(row("Panel size", None, segment([(k, k) for k in looks.SIZES], nearest,
+                   lambda k: run(lambda: looks.apply_panel(cfg.get("panel_position", "bottom"), looks.SIZES[k]), "Panel resized."))))
+        box.append(label("Looks", "rt"))
+        for name, look in looks.PRESETS.items():
+            b = Gtk.Button(label="Apply")
+            b.connect("clicked", lambda w, lk=look: run(lambda: looks.apply_look(lk), f"{lk['name']} applied."))
+            box.append(row(name, f"{look['mode'].title()} · panel {look['panel_position']} · accent {look['accent']}", b))
+        share = Gtk.Box(spacing=10)
+        exp, imp = Gtk.Button(label="Export my Look…"), Gtk.Button(label="Import a Look…")
+        exp.connect("clicked", lambda b: self.save_look())
+        imp.connect("clicked", lambda b: self.open_look())
+        share.append(exp)
+        share.append(imp)
+        box.append(share)
+        box.append(label("A Look is a small file you can share. It only contains colours and layout choices, never code.", "dim", wrap=True))
         box.append(self.appearance_status)
         return outer
+
+    def save_look(self):
+        dialog = Gtk.FileDialog()
+        dialog.set_initial_name("my-look.saymylook")
+        def done(d, result):
+            try:
+                f = d.save_finish(result)
+            except GLib.Error:
+                return
+            looks.export_look(f.get_path())
+            self.appearance_status.set_text("Look saved. Share the file with anyone.")
+        dialog.save(self, None, done)
+
+    def open_look(self):
+        dialog = Gtk.FileDialog()
+        def done(d, result):
+            try:
+                f = d.open_finish(result)
+            except GLib.Error:
+                return
+            def apply():
+                try:
+                    return looks.import_look(f.get_path())["name"]
+                except (ValueError, OSError) as exc:
+                    return "Could not use that file: " + str(exc)
+            bg(apply, lambda r: (self.apply_css(), self.appearance_status.set_text(r if r.startswith("Could") else f"{r} applied.")))
+        dialog.open(self, None, done)
 
     def set_accent(self, hexv):
         def done(changed):

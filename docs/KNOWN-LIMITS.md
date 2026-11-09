@@ -39,6 +39,9 @@ Written plainly so nothing surprises you.
   It has not yet run against a real `dpkg-repack`, `apt-get` or a real downgrade. Test Undo on a spare machine or VM before trusting it.
   Whole-system snapshots (Btrfs) are on the roadmap; v0.1 undoes package versions only.
 
+- **Looks**: colour swapping, panel edits and Look validation are tested (including hostile files) and the light theme was screenshotted on a virtual
+  screen. Already-open GTK apps keep their old theme until restarted. Wallpapers are not part of a Look yet.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).

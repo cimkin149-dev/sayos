@@ -4,7 +4,7 @@
 data wallet, installer branding, translation groundwork.
 
 **Stage 2: SayMy Shell and settings**
-Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine, SayMy Doctor, night light, screen timeout, Drop (nearby sharing, v0.1), Users and Updates panels, offline update bundles. First GitHub ISO build succeeded.
+Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine, SayMy Doctor, night light, screen timeout, Drop (nearby sharing, v0.1), Users and Updates panels, offline update bundles. Safe Updates with Undo, Looks (themes, panel, shareable files). Three GitHub ISO builds succeeded.
 Next: Users and Updates panels, night light, custom login screen, accent colour that follows
 the sky, first-run welcome, Modes (Study, Business, Home, Developer), screenshots-driven polish.
 

@@ -29,6 +29,7 @@ import saymy_doctor as doc  # noqa: E402
 import saymy_drop as drop  # noqa: E402
 import saymy_system as sysm  # noqa: E402
 import saymy_safeupdate as su  # noqa: E402
+import saymy_looks as lk  # noqa: E402
 
 
 class SayBar(unittest.TestCase):
@@ -823,6 +824,98 @@ class SafeUpdates(unittest.TestCase):
         ok, _ = sysm.safe_undo("2026", runner=FakeRun(out="RESULT: {\"ok\": false}"))
         self.assertFalse(ok)
 
+
+
+class Looks(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["XDG_CONFIG_HOME"] = self.tmp + "/cfg"
+        self.home = Path(self.tmp) / "home"
+        w = self.home / ".config/waybar"
+        w.mkdir(parents=True)
+        (w / "style.css").write_text("@define-color sun #FF8A1F;\nwindow#waybar > box { background: rgba(12, 26, 42, 0.92); border: 1px solid #1E3A55; }\n#clock { color: #F3E9D8; background: #14283C; }\n.mu { color: #9FB3C8; }\n")
+        (w / "config.jsonc").write_text(json.dumps({"layer": "top", "position": "bottom", "height": 46, "margin": "0 12 10 12", "spacing": 8}))
+        (self.home / ".config/fuzzel").mkdir(parents=True)
+        (self.home / ".config/fuzzel/fuzzel.ini").write_text("background=0C1A2AF2\ntext=F3E9D8FF\nselection=1E3A55FF\n")
+        (self.home / ".config/labwc").mkdir(parents=True)
+        (self.home / ".config/labwc/environment").write_text("XDG_SESSION_TYPE=wayland\nGTK_THEME=Adwaita-dark\n")
+
+    def tearDown(self):
+        del os.environ["XDG_CONFIG_HOME"]
+
+    def test_swap_is_one_pass_and_reversible(self):
+        css = open(self.home / ".config/waybar/style.css").read()
+        light = lk.swap_palette(css, "dark", "light")
+        self.assertNotIn("F3E9D8", light.upper())
+        self.assertIn("rgba(247, 241, 230,", light)
+        self.assertIn("#14283C", light.upper().replace("COLOR: #14283C", "#14283C"))     # text became the old surface colour, not chained again
+        self.assertEqual(lk.swap_palette(light, "light", "dark"), css)                    # perfect round trip
+        self.assertEqual(lk.swap_palette(css, "dark", "dark"), css)
+
+    def test_apply_mode_light_then_dark(self):
+        changed = lk.apply_mode("light", home=self.home, reload=False)
+        self.assertIn(".config/waybar/style.css", changed)
+        self.assertIn("background=F7F1E6F2", (self.home / ".config/fuzzel/fuzzel.ini").read_text())
+        self.assertIn("GTK_THEME=Adwaita\n", (self.home / ".config/labwc/environment").read_text())
+        self.assertEqual(be_mode(), "light")
+        lk.apply_mode("dark", home=self.home, reload=False)
+        self.assertIn("background=0C1A2AF2", (self.home / ".config/fuzzel/fuzzel.ini").read_text())
+        self.assertIn("GTK_THEME=Adwaita-dark", (self.home / ".config/labwc/environment").read_text())
+        with self.assertRaises(ValueError):
+            lk.apply_mode("neon", home=self.home, reload=False)
+
+    def test_panel(self):
+        self.assertTrue(lk.apply_panel("top", 36, home=self.home, reload=False))
+        cfg = json.loads((self.home / ".config/waybar/config.jsonc").read_text())
+        self.assertEqual((cfg["position"], cfg["height"], cfg["margin"], cfg["spacing"]), ("top", 36, "10 12 0 12", 8))
+        for bad in (("left", 46), ("top", 5), ("top", 500)):
+            with self.assertRaises(ValueError):
+                lk.apply_panel(*bad, home=self.home, reload=False)
+
+    def test_validate_look_rejects_hostile_input(self):
+        good = {"name": "Mine", "accent": "#2F8FD1", "mode": "light", "panel_position": "top", "panel_height": 40}
+        self.assertEqual(lk.validate_look(good)["accent"], "#2F8FD1")
+        for bad in ({}, [], "x", {"name": ""}, dict(good, accent="red"), dict(good, mode="neon"), dict(good, panel_position="left"),
+                    dict(good, panel_height=9999), dict(good, panel_height="46"), dict(good, panel_height=True), dict(good, name=5)):
+            with self.assertRaises(ValueError, msg=str(bad)):
+                lk.validate_look(bad)
+        clean = lk.validate_look(dict(good, name="Evil\x00\x07 name " + "x" * 100, command="rm -rf /", __import__="os"))
+        self.assertEqual(set(clean), {"name", "accent", "mode", "panel_position", "panel_height"})     # unknown fields dropped
+        self.assertLessEqual(len(clean["name"]), 40)
+        self.assertNotIn("\x00", clean["name"])
+
+    def test_export_import_roundtrip_and_limits(self):
+        lk.apply_look(lk.PRESETS["Paper"], home=self.home, reload=False)
+        f = Path(self.tmp) / "paper.saymylook"
+        lk.export_look(f, "Paper copy")
+        lk.apply_look(lk.PRESETS["Sunrise"], home=self.home, reload=False)
+        self.assertEqual(lk.import_look(f, home=self.home, reload=False)["mode"], "light")
+        self.assertEqual(be_mode(), "light")
+        big = Path(self.tmp) / "big.saymylook"
+        big.write_text(" " * 10000)
+        with self.assertRaises(ValueError):
+            lk.import_look(big, home=self.home, reload=False)
+        junk = Path(self.tmp) / "junk.saymylook"
+        junk.write_text("not json {")
+        with self.assertRaises(ValueError):
+            lk.import_look(junk, home=self.home, reload=False)
+
+    def test_presets_are_valid_and_cli_intents(self):
+        for look in lk.PRESETS.values():
+            self.assertEqual(lk.validate_look(look)["name"], look["name"])
+        self.assertEqual(say.handle("dark mode", "en").exec, ["saymy-look", "mode", "dark"])
+        self.assertEqual(say.handle("switch to light", "en").exec, ["saymy-look", "mode", "light"])
+
+    def test_windows_follow_the_theme(self):
+        import saymy_ui
+        lk.apply_mode("light", home=self.home, reload=False)
+        css = saymy_ui.css_for("#D9650D")
+        self.assertIn("#F7F1E6", css.upper())
+        self.assertNotIn("#0C1A2A", css.upper())
+
+
+def be_mode():
+    return sb.load_appearance().get("mode")
 
 
 class Sky(unittest.TestCase):

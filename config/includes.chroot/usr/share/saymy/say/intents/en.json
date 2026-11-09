@@ -248,6 +248,22 @@
     "receive files",
     "drop"
    ]
+  },
+  {
+   "id": "look_dark",
+   "patterns": [
+    "dark mode",
+    "dark theme",
+    "switch to dark"
+   ]
+  },
+  {
+   "id": "look_light",
+   "patterns": [
+    "light mode",
+    "light theme",
+    "switch to light"
+   ]
   }
  ]
 }

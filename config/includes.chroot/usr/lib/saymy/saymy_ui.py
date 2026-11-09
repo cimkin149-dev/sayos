@@ -44,9 +44,11 @@ progressbar progress { background: @ACC@; min-height: 8px; border-radius: 999px;
 """
 
 
-def css_for(accent):
+def css_for(accent, mode=None):
+    import saymy_looks as looks
+    mode = mode or be.load_appearance().get("mode", "dark")
     extra = "".join(f".sw-{n} {{ background: {h}; }}\n" for n, h in be.ACCENTS.items())
-    return CSS.replace("@ACC@", accent) + extra
+    return looks.swap_palette(CSS.replace("@ACC@", accent), "dark", mode) + extra
 
 
 def bg(fn, done):

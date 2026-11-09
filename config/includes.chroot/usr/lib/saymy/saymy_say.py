@@ -239,6 +239,7 @@ SIMPLE = {
     "doctor_slow": ["saymy-doctor", "--topic", "slow"], "doctor_all": ["saymy-doctor"],
     "night_on": ["saymy-night", "on"], "night_off": ["saymy-night", "off"],
     "drop": ["saymy-drop"],
+    "look_dark": ["saymy-look", "mode", "dark"], "look_light": ["saymy-look", "mode", "light"],
     "language": ["saymy-language"],
     "install": ["saymy-install"],
 }
