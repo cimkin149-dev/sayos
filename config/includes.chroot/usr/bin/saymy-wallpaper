@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""saymy-wallpaper: start the wallpaper chosen in Settings (live, sky photos, or your own picture)."""
+import os
+import subprocess
+import sys
+
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_wallpaper as wp
+
+try:
+    import cairo  # noqa: F401
+    have_cairo = True
+except ImportError:
+    have_cairo = False
+cfg = wp.load()
+cmd = wp.command_for(cfg, have_cairo)
+wp.cache_dir().mkdir(parents=True, exist_ok=True)
+(wp.cache_dir() / "wallpaper.pid").write_text(str(os.getpid()))
+if cmd[0] != "saymy-sky":
+    # the sky tool still runs (without painting) so "follow the sky" can recolour the desktop
+    subprocess.Popen(["saymy-sky", "--accent-only"], start_new_session=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+os.execvp(cmd[0], cmd)

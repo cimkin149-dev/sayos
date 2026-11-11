@@ -29,6 +29,7 @@ if [ "$1" = "--phase" ]; then phase; exit 0; fi
 
 cache="${XDG_CACHE_HOME:-$HOME/.cache}/saymy"
 mkdir -p "$cache"
+echo $$ > "$cache/sky.pid"
 current=""
 while :; do
     p="$(phase)"
@@ -39,8 +40,10 @@ while :; do
         if grep -q '"follow_sky": true' "${XDG_CONFIG_HOME:-$HOME/.config}/saymy/appearance.json" 2>/dev/null; then
             saymy-accent "$(accent "$p")" >/dev/null 2>&1 &
         fi
-        pkill -x swaybg 2>/dev/null
-        swaybg -i "$SHARE/wallpapers/saymy-$p.jpg" -m fill >/dev/null 2>&1 &
+        if [ "$1" != "--accent-only" ]; then
+            pkill -x swaybg 2>/dev/null
+            swaybg -i "$SHARE/wallpapers/saymy-$p.jpg" -m fill >/dev/null 2>&1 &
+        fi
     fi
     sleep 300
 done

@@ -30,6 +30,12 @@ import saymy_drop as drop  # noqa: E402
 import saymy_system as sysm  # noqa: E402
 import saymy_safeupdate as su  # noqa: E402
 import saymy_looks as lk  # noqa: E402
+import saymy_sound as snd  # noqa: E402
+import saymy_wallpaper as wpm  # noqa: E402
+try:
+    import saymy_live as live  # noqa: E402
+except ImportError:            # pycairo is not installed on every machine that runs these checks
+    live = None
 
 
 class SayBar(unittest.TestCase):
@@ -916,6 +922,216 @@ class Looks(unittest.TestCase):
 
 def be_mode():
     return sb.load_appearance().get("mode")
+
+
+@unittest.skipIf(live is None, "pycairo not installed")
+class LivingSky(unittest.TestCase):
+    def frame(self, scene, hour, gd=False, w=160, h=90):
+        import cairo
+        surf = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+        live.render(cairo.Context(surf), w, h, 1.5, hour, scene, gd)
+        return bytes(surf.get_data())
+
+    def test_every_scene_renders_at_every_hour(self):
+        for scene in live.SCENES:
+            for hour in (0, 5.5, 6.4, 9, 12.5, 16, 18.2, 19.2, 20.5, 23.9):
+                for gd in (False, True):
+                    self.assertGreater(len(self.frame(scene, hour, gd)), 0)
+
+    def test_frames_differ_over_time_and_by_power(self):
+        a, b = self.frame("Savanna", 12.0), self.frame("Savanna", 18.8)
+        self.assertNotEqual(a, b)                                        # the sky really changes through the day
+        self.assertNotEqual(self.frame("Savanna", 13.0), self.frame("Savanna", 13.0, gd=True))      # Grid Down changes the scene
+        import cairo
+        s1, s2 = (cairo.ImageSurface(cairo.FORMAT_RGB24, 160, 90) for _ in range(2))
+        live.render(cairo.Context(s1), 160, 90, 0.0, 12, "Lakeshore")
+        live.render(cairo.Context(s2), 160, 90, 2.0, 12, "Lakeshore")
+        self.assertNotEqual(bytes(s1.get_data()), bytes(s2.get_data()))                                 # and it moves between frames
+
+    def test_deterministic(self):
+        self.assertEqual(self.frame("Highlands", 8.0), self.frame("Highlands", 8.0))
+
+    def test_sky_is_continuous_and_loops_at_midnight(self):
+        prev = live.sky_colors(0.0)
+        worst = 0
+        for i in range(1, 2401):
+            cur = live.sky_colors(i / 100)
+            worst = max(worst, max(abs(a - b) for c1, c2 in zip(prev, cur) for a, b in zip(c1, c2)))
+            prev = cur
+        self.assertLess(worst, 0.03)                                     # no sudden jumps in 24 hours at 0.01 hour steps
+        self.assertEqual(live.sky_colors(24.0), live.sky_colors(0.0))
+
+    def test_sun_and_moon_follow_the_clock(self):
+        w, h, hz = 1000, 600, 380
+        self.assertIsNone(live.sun_position(3.0, w, h, hz))
+        self.assertIsNone(live.sun_position(21.0, w, h, hz))
+        x1, y1, _ = live.sun_position(7, w, h, hz)
+        x2, y2, _ = live.sun_position(12.6, w, h, hz)
+        x3, y3, _ = live.sun_position(18, w, h, hz)
+        self.assertTrue(x1 < x2 < x3 and y2 < y1 and y2 < y3)            # rises in the east, peaks, sets in the west
+        self.assertIsNotNone(live.moon_position(23, w, h, hz))
+        self.assertIsNone(live.moon_position(12, w, h, hz))
+        self.assertGreater(live.daylight(12), 0.95)
+        self.assertLess(live.daylight(2), 0.01)
+
+    def test_adaptive_quality_plan(self):
+        self.assertEqual(live.plan(10, 0), (0, live.MAX_FPS))             # fast machine keeps full quality
+        self.assertEqual(live.plan(40, 0)[0], 1)                          # slower: smaller picture first
+        self.assertEqual(live.plan(40, 2), (2, 8))
+        self.assertEqual(live.plan(100, 2), (2, 0))                       # hopeless: stop animating, use still frames
+        self.assertEqual(live.plan(0, 1), (1, live.MAX_FPS))
+
+    def test_thumbnails_and_png(self):
+        t = wpm.thumbnails(hour=17.0, size=(64, 36))
+        self.assertEqual(set(t), set(wpm.SCENES))
+        self.assertTrue(all(b[:8] == b"\x89PNG\r\n\x1a\n" for b in t.values()))
+
+
+class WallpaperSettings(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["XDG_CONFIG_HOME"] = self.tmp + "/cfg"
+        os.environ["XDG_CACHE_HOME"] = self.tmp + "/cache"
+
+    def tearDown(self):
+        del os.environ["XDG_CONFIG_HOME"], os.environ["XDG_CACHE_HOME"]
+
+    def test_defaults_and_validation(self):
+        self.assertEqual(wpm.load(), {"mode": "live", "scene": "Savanna", "animate": "auto", "image": ""})
+        cfg = wpm.set_wallpaper(mode="live", scene="Lakeshore", animate="never", reload=False)
+        self.assertEqual((cfg["scene"], cfg["animate"]), ("Lakeshore", "never"))
+        self.assertEqual(wpm.load()["scene"], "Lakeshore")
+        for bad in ({"mode": "video"}, {"scene": "Moon"}, {"animate": "sometimes"}):
+            with self.assertRaises(ValueError):
+                wpm.set_wallpaper(reload=False, **bad)
+        with self.assertRaises(ValueError):
+            wpm.set_wallpaper(mode="image", reload=False)                 # no picture chosen yet
+
+    def test_pictures_are_checked(self):
+        d = Path(self.tmp)
+        good, bad_ext, folder = d / "me.jpg", d / "notes.txt", d / "dir.png"
+        good.write_bytes(b"jpegdata")
+        bad_ext.write_text("x")
+        folder.mkdir()
+        self.assertTrue(wpm.valid_image(str(good)))
+        self.assertFalse(wpm.valid_image(str(bad_ext)))
+        self.assertFalse(wpm.valid_image(str(folder)))
+        self.assertFalse(wpm.valid_image(str(d / "missing.png")))
+        cfg = wpm.set_wallpaper(mode="image", image=str(good), reload=False)
+        self.assertEqual(wpm.command_for(cfg), ["swaybg", "-i", str(good.resolve()), "-m", "fill"])
+
+    def test_dispatcher_choices(self):
+        self.assertEqual(wpm.command_for(dict(wpm.DEFAULT)), ["saymy-live", "--daemon"])
+        self.assertEqual(wpm.command_for(dict(wpm.DEFAULT), have_cairo=False), ["saymy-sky"])      # no Cairo: fall back to sky photos
+        self.assertEqual(wpm.command_for(dict(wpm.DEFAULT, mode="sky")), ["saymy-sky"])
+        self.assertEqual(wpm.command_for(dict(wpm.DEFAULT, mode="image", image="/nonexistent.png")), ["saymy-sky"])
+
+    def test_stop_uses_saved_process_ids_only(self):
+        import subprocess as sp
+        wpm.cache_dir().mkdir(parents=True)
+        victim = sp.Popen(["sleep", "30"])
+        (wpm.cache_dir() / "live.pid").write_text(str(victim.pid))
+        (wpm.cache_dir() / "wallpaper.pid").write_text("not a number")
+        wpm.stop()
+        self.assertEqual(victim.wait(timeout=5), -15)                       # SIGTERM
+        self.assertFalse((wpm.cache_dir() / "live.pid").exists())
+
+
+class SoundPacks(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        os.environ["XDG_CONFIG_HOME"] = self.tmp
+
+    def tearDown(self):
+        del os.environ["XDG_CONFIG_HOME"]
+
+    def test_all_packs_have_all_events_as_clean_wav(self):
+        import wave
+        self.assertEqual(snd.packs(), ["Classic", "Quiet", "Savanna"])
+        for pack in snd.packs():
+            for ev in snd.EVENTS:
+                f = SHARE / "sounds" / pack / f"{ev}.wav"
+                self.assertTrue(f.is_file(), f"{pack}/{ev}")
+                with wave.open(str(f)) as w:
+                    self.assertEqual((w.getnchannels(), w.getsampwidth(), w.getframerate()), (1, 2, 22050))
+                    secs = w.getnframes() / w.getframerate()
+                    frames = w.readframes(w.getnframes())
+                self.assertTrue(0.2 <= secs <= 3.0, f"{pack}/{ev} is {secs}s")
+                import array
+                samples = array.array("h", frames)
+                peak = max(abs(x) for x in samples)
+                self.assertTrue(3000 < peak <= 29000, f"{pack}/{ev} peak {peak}")        # audible, never clipping
+                self.assertLess(abs(samples[0]), 800)                                      # starts without a click
+                self.assertLess(abs(samples[-1]), 800)
+
+    def test_pack_choice_validation_and_config(self):
+        self.assertEqual(snd.load(), {"pack": "Savanna", "volume": 70})
+        self.assertEqual(snd.set_pack("Quiet")["pack"], "Quiet")
+        self.assertEqual(snd.set_pack("Off")["pack"], "Off")
+        with self.assertRaises(ValueError):
+            snd.set_pack("../../etc")
+        self.assertEqual(snd.set_volume(250)["volume"], 100)
+        self.assertEqual(snd.set_volume(-5)["volume"], 0)
+
+    def test_sound_file_lookup_is_safe(self):
+        self.assertIsNotNone(snd.sound_file("notify", "Savanna"))
+        self.assertIsNone(snd.sound_file("../../../etc/passwd", "Savanna"))
+        self.assertIsNone(snd.sound_file("notify", "Off"))
+        self.assertIsNone(snd.sound_file("notify", "NoSuchPack"))
+
+    def test_play_respects_off_volume_and_dnd(self):
+        started = []
+        real_popen, real_muted, real_cmd = snd.subprocess.Popen, snd.muted_now, snd.player_command
+        snd.subprocess.Popen = lambda cmd, **k: started.append(cmd)
+        snd.player_command = lambda f, v: ["pw-play", str(f)]
+        try:
+            snd.muted_now = lambda: False
+            self.assertTrue(snd.play("notify"))
+            snd.set_pack("Off")
+            self.assertFalse(snd.play("notify"))
+            snd.set_pack("Savanna")
+            snd.set_volume(0)
+            self.assertFalse(snd.play("notify"))
+            snd.set_volume(60)
+            snd.muted_now = lambda: True                                       # Study space: do not disturb
+            self.assertFalse(snd.play("notify"))
+            self.assertTrue(snd.play("power-cut"))                              # safety alerts always sound
+            self.assertTrue(snd.play("notify", force=True))
+        finally:
+            snd.subprocess.Popen, snd.muted_now, snd.player_command = real_popen, real_muted, real_cmd
+        self.assertEqual(len(started), 3)
+
+    def test_never_crashes_without_a_player(self):
+        old = os.environ["PATH"]
+        os.environ["PATH"] = "/nonexistent"
+        try:
+            self.assertIsNone(snd.player_command(Path("/x.wav"), 50))
+            self.assertFalse(snd.play("login", force=True))
+        finally:
+            os.environ["PATH"] = old
+
+    def test_power_events_play_sounds(self):
+        log = power.apply("power_cut", {"battery_pct": 90}, dry=True)
+        self.assertIn(["saymy-sound", "play", "power-cut"], log)
+        self.assertIn(["saymy-sound", "play", "power-back"], power.apply("power_back", {"battery_pct": 90}, dry=True))
+        self.assertIn(["saymy-sound", "play", "battery-low"], power.apply("low", {"battery_pct": 19}, dry=True))
+
+    def test_looks_carry_wallpaper_and_sound_by_name_only(self):
+        base = {"name": "Mine", "accent": "#2F8FD1", "mode": "dark", "panel_position": "bottom", "panel_height": 46}
+        ok = lk.validate_look(dict(base, wallpaper="Lakeshore", sound="Quiet"))
+        self.assertEqual((ok["wallpaper"], ok["sound"]), ("Lakeshore", "Quiet"))
+        self.assertNotIn("wallpaper", lk.validate_look(base))                   # optional
+        for bad in ({"wallpaper": "/home/user/.ssh/id_rsa"}, {"wallpaper": "../../x.png"}, {"wallpaper": "Moon"}, {"sound": "/etc/passwd"},
+                    {"sound": "Loud"}, {"wallpaper": 7}):
+            with self.assertRaises(ValueError, msg=str(bad)):
+                lk.validate_look(dict(base, **bad))
+        for look in lk.PRESETS.values():
+            self.assertIn(lk.validate_look(look)["wallpaper"], lk.WALLPAPERS)
+
+    def test_say_bar_sound_intents(self):
+        self.assertEqual(say.handle("mute sounds", "en").exec, ["saymy-sound", "use", "Off"])
+        self.assertEqual(say.handle("sounds on", "en").exec, ["saymy-sound", "use", "Savanna"])
+
 
 
 class Sky(unittest.TestCase):

@@ -124,18 +124,21 @@ def apply(event: str, cur: dict, dry: bool = False) -> list:
     log = []
     pct = cur.get("battery_pct")
     if event == "power_cut":
-        _notify(i18n.t("power.cut"), i18n.t("power.cut.body"), "normal", dry, log)
+        _run(["saymy-sound", "play", "power-cut"], dry, log)
+        _notify(i18n.t("power.cut"), i18n.t("power.cut.body"), "low", dry, log)
         _run(["powerprofilesctl", "set", "power-saver"], dry, log)
         _run(["brightnessctl", "--save", "set", "40%"], dry, log)
         _run(["sync"], dry, log)
         diary({"event": "cut", "ts": int(time.time()), "battery_pct": pct}, dry)
     elif event == "power_back":
+        _run(["saymy-sound", "play", "power-back"], dry, log)
         _notify(i18n.t("power.back"), "", "low", dry, log)
         _run(["powerprofilesctl", "set", "balanced"], dry, log)
         _run(["brightnessctl", "--restore"], dry, log)
         diary({"event": "back", "ts": int(time.time()), "battery_pct": pct}, dry)
     elif event == "low":
-        _notify(i18n.t("power.low", pct=pct), "", "normal", dry, log)
+        _run(["saymy-sound", "play", "battery-low"], dry, log)
+        _notify(i18n.t("power.low", pct=pct), "", "low", dry, log)
     elif event == "critical":
         _notify(i18n.t("power.critical", pct=pct), "", "critical", dry, log)
         _run(["sync"], dry, log)

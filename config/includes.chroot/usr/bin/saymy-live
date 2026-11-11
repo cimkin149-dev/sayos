@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""saymy-live: Living Sky wallpaper.
+
+   saymy-live --daemon                       run as the desktop background (animated if the compositor supports it)
+   saymy-live --png out.png [--scene S] [--hour 17.5] [--grid-down] [--size 1920x1080]
+"""
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_live as live            # noqa: E402
+import saymy_power                   # noqa: E402
+import saymy_wallpaper as wp         # noqa: E402
+
+
+def arg(name, default=None):
+    return sys.argv[sys.argv.index(name) + 1] if name in sys.argv else default
+
+
+def on_mains(cfg):
+    if cfg["animate"] == "always":
+        return True
+    if cfg["animate"] == "never":
+        return False
+    return saymy_power.read_state().get("ac") is not False        # unknown (desktop) counts as mains
+
+
+def grid_down():
+    return saymy_power.read_state().get("ac") is False
+
+
+def write_pid():
+    wp.cache_dir().mkdir(parents=True, exist_ok=True)
+    (wp.cache_dir() / "live.pid").write_text(str(os.getpid()))
+
+
+def run_frames(cfg):
+    """No animation available (or paused by choice): a fresh still frame every minute, shown with swaybg."""
+    cache = wp.cache_dir()
+    cache.mkdir(parents=True, exist_ok=True)
+    n, current, last_gd = 0, None, None
+    while True:
+        cfg = wp.load()
+        gd = grid_down()
+        path = cache / f"live-{n % 2}.png"
+        live.render_png(path, 1280, 720, cfg["scene"], live.hour_now(), t=time.time() % 600, grid_down=gd, quality=0.6)
+        new = subprocess.Popen(["swaybg", "-i", str(path), "-m", "fill"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        time.sleep(1.0)
+        if current:
+            current.terminate()
+        current, n, last_gd = new, n + 1, gd
+        for _ in range(6):                           # wake early if mains power changes
+            time.sleep(10)
+            if grid_down() != last_gd:
+                break
+
+
+def run_window(cfg):
+    import gi
+    gi.require_version("Gtk", "3.0")
+    gi.require_version("GtkLayerShell", "0.1")
+    from gi.repository import GLib, Gtk, GtkLayerShell
+    import cairo
+
+    state = {"level": 0, "fps": live.MAX_FPS, "surface": None, "t0": time.time(), "gd": grid_down(), "animate": on_mains(cfg), "cfg": cfg}
+    windows = []
+
+    def make_surface():
+        w, h = live.RESOLUTIONS[state["level"]]
+        state["surface"] = cairo.ImageSurface(cairo.FORMAT_RGB24, w, h)
+
+    def draw_frame():
+        w, h = live.RESOLUTIONS[state["level"]]
+        started = time.perf_counter()
+        live.render(cairo.Context(state["surface"]), w, h, time.time() - state["t0"], live.hour_now(), state["cfg"]["scene"], state["gd"],
+                    quality=1.0 if state["level"] == 0 else 0.6)
+        return (time.perf_counter() - started) * 1000
+
+    def on_draw(widget, cr):
+        a = widget.get_allocation()
+        w, h = live.RESOLUTIONS[state["level"]]
+        cr.scale(a.width / w, a.height / h)
+        cr.set_source_surface(state["surface"], 0, 0)
+        cr.get_source().set_filter(cairo.FILTER_BILINEAR)
+        cr.paint()
+        return False
+
+    def tick():
+        state["cfg"] = wp.load()
+        state["gd"] = grid_down()
+        state["animate"] = on_mains(state["cfg"])
+        ms = draw_frame()
+        for win in windows:
+            win.queue_draw()
+        if state["animate"]:
+            state["level"], state["fps"] = live.plan(ms, state["level"])
+            if state["level"] != 0 and state["surface"].get_width() != live.RESOLUTIONS[state["level"]][0]:
+                make_surface()
+        else:
+            state["fps"] = 0
+        delay = int(1000 / state["fps"]) if state["fps"] else 30000       # paused: one still frame every 30 s
+        GLib.timeout_add(delay, tick)
+        return False
+
+    make_surface()
+    display = Gdk_display()
+    for i in range(max(1, display.get_n_monitors())):
+        win = Gtk.Window()
+        win.set_decorated(False)
+        win.set_title("saymy-live")
+        GtkLayerShell.init_for_window(win)
+        GtkLayerShell.set_layer(win, GtkLayerShell.Layer.BACKGROUND)
+        for edge in (GtkLayerShell.Edge.TOP, GtkLayerShell.Edge.BOTTOM, GtkLayerShell.Edge.LEFT, GtkLayerShell.Edge.RIGHT):
+            GtkLayerShell.set_anchor(win, edge, True)
+        GtkLayerShell.set_exclusive_zone(win, -1)
+        GtkLayerShell.set_namespace(win, "saymy-live")
+        try:
+            GtkLayerShell.set_monitor(win, display.get_monitor(i))
+        except Exception:
+            pass
+        area = Gtk.DrawingArea()
+        area.connect("draw", on_draw)
+        win.add(area)
+        win.show_all()
+        windows.append(win)
+    draw_frame()
+    GLib.timeout_add(50, tick)
+    signal.signal(signal.SIGTERM, lambda *a: Gtk.main_quit())
+    Gtk.main()
+
+
+def Gdk_display():
+    from gi.repository import Gdk
+    return Gdk.Display.get_default()
+
+
+def layer_shell_ready() -> bool:
+    try:
+        import gi
+        gi.require_version("Gtk", "3.0")
+        gi.require_version("GtkLayerShell", "0.1")
+        from gi.repository import GtkLayerShell
+        return bool(GtkLayerShell.is_supported())
+    except (ImportError, ValueError):
+        return False
+
+
+def main():
+    if "--png" in sys.argv:
+        w, h = (int(x) for x in arg("--size", "1280x720").split("x"))
+        hour = float(arg("--hour", live.hour_now()))
+        live.render_png(arg("--png"), w, h, arg("--scene", "Savanna"), hour, t=float(arg("--t", 3.0)), grid_down="--grid-down" in sys.argv)
+        return 0
+    if "--daemon" in sys.argv:
+        write_pid()
+        signal.signal(signal.SIGTERM, lambda *a: sys.exit(0))
+        cfg = wp.load()
+        if layer_shell_ready():
+            run_window(cfg)
+        else:
+            run_frames(cfg)
+        return 0
+    print(__doc__)
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

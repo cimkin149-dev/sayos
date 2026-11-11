@@ -1,0 +1,22 @@
+#!/usr/bin/env python3
+"""saymy-sound play EVENT | packs | use PACK | volume N | status"""
+import os, sys
+sys.path.insert(0, os.environ.get("SAYMY_LIB", "/usr/lib/saymy"))
+import saymy_sound as snd
+
+a = sys.argv[1:]
+try:
+    if len(a) >= 2 and a[0] == "play":
+        snd.play(a[1], force="--force" in a)
+    elif a[:1] == ["packs"]:
+        print("\n".join(snd.packs() + [snd.PACKS_OFF]))
+    elif len(a) == 2 and a[0] == "use":
+        print("sound pack:", snd.set_pack(a[1])["pack"])
+    elif len(a) == 2 and a[0] == "volume":
+        print("volume:", snd.set_volume(int(a[1]))["volume"])
+    elif a[:1] == ["status"] or not a:
+        c = snd.load(); print(f"pack {c['pack']}, volume {c['volume']}")
+    else:
+        print(__doc__); sys.exit(2)
+except (ValueError, OSError) as exc:
+    print(exc, file=sys.stderr); sys.exit(1)

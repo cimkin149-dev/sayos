@@ -9,6 +9,8 @@ import re
 from pathlib import Path
 
 import saymy_settings_backend as be
+import saymy_sound as snd
+import saymy_wallpaper as wpm
 
 MAX_LOOK_BYTES = 4096
 
@@ -18,12 +20,14 @@ PALETTES = {
 }
 RGBA_BASE = {"dark": "12, 26, 42", "light": "247, 241, 230"}
 SIZES = {"Compact": 36, "Normal": 46, "Large": 58}
+WALLPAPERS = ("Sky",) + tuple(wpm.SCENES)
+SOUND_PACKS = ("Savanna", "Quiet", "Classic", "Off")
 
 PRESETS = {
-    "Sunrise": {"name": "Sunrise", "accent": "#FF8A1F", "mode": "dark", "panel_position": "bottom", "panel_height": 46},
-    "Lake Night": {"name": "Lake Night", "accent": "#2F8FD1", "mode": "dark", "panel_position": "bottom", "panel_height": 46},
-    "Paper": {"name": "Paper", "accent": "#D9650D", "mode": "light", "panel_position": "bottom", "panel_height": 46},
-    "Compact Top Bar": {"name": "Compact Top Bar", "accent": "#3FA66B", "mode": "dark", "panel_position": "top", "panel_height": 36},
+    "Sunrise": {"name": "Sunrise", "accent": "#FF8A1F", "mode": "dark", "panel_position": "bottom", "panel_height": 46, "wallpaper": "Savanna", "sound": "Savanna"},
+    "Lake Night": {"name": "Lake Night", "accent": "#2F8FD1", "mode": "dark", "panel_position": "bottom", "panel_height": 46, "wallpaper": "Lakeshore", "sound": "Quiet"},
+    "Paper": {"name": "Paper", "accent": "#D9650D", "mode": "light", "panel_position": "bottom", "panel_height": 46, "wallpaper": "Highlands", "sound": "Quiet"},
+    "Compact Top Bar": {"name": "Compact Top Bar", "accent": "#3FA66B", "mode": "dark", "panel_position": "top", "panel_height": 36, "wallpaper": "Sky", "sound": "Classic"},
 }
 
 
@@ -128,13 +132,24 @@ def validate_look(data) -> dict:
     if isinstance(h, bool) or not isinstance(h, int) or not 28 <= h <= 72:
         raise ValueError("panel_height must be a whole number from 28 to 72")
     look["panel_height"] = h
+    if "wallpaper" in data:
+        if data["wallpaper"] not in WALLPAPERS:
+            raise ValueError("wallpaper must be one of " + ", ".join(WALLPAPERS))
+        look["wallpaper"] = data["wallpaper"]
+    if "sound" in data:
+        if data["sound"] not in SOUND_PACKS:
+            raise ValueError("sound must be one of " + ", ".join(SOUND_PACKS))
+        look["sound"] = data["sound"]
     return look
 
 
 def current_look(name: str = "My Look") -> dict:
     a = be.load_appearance()
+    w = wpm.load()
+    pack = snd.load()["pack"]
     return validate_look({"name": name, "accent": a.get("accent", be.DEFAULT_ACCENT), "mode": a.get("mode", "dark"),
-                          "panel_position": a.get("panel_position", "bottom"), "panel_height": a.get("panel_height", 46)})
+                          "panel_position": a.get("panel_position", "bottom"), "panel_height": a.get("panel_height", 46),
+                          "wallpaper": w["scene"] if w["mode"] == "live" else "Sky", "sound": pack if pack in SOUND_PACKS else "Savanna"})
 
 
 def apply_look(look: dict, home: Path = None, reload: bool = True) -> dict:
@@ -142,6 +157,13 @@ def apply_look(look: dict, home: Path = None, reload: bool = True) -> dict:
     apply_mode(look["mode"], home=home, reload=False)
     be.apply_accent(look["accent"], home=home, reload=False)
     apply_panel(look["panel_position"], look["panel_height"], home=home, reload=False)
+    if "wallpaper" in look:
+        if look["wallpaper"] == "Sky":
+            wpm.set_wallpaper(mode="sky", reload=False)
+        else:
+            wpm.set_wallpaper(mode="live", scene=look["wallpaper"], reload=False)
+    if "sound" in look:
+        snd.set_pack(look["sound"]) if look["sound"] == "Off" or look["sound"] in snd.packs() else None
     a = be.load_appearance()
     a["follow_sky"] = False
     a["look"] = look["name"]
@@ -150,6 +172,8 @@ def apply_look(look: dict, home: Path = None, reload: bool = True) -> dict:
         be.run(["pkill", "-SIGUSR2", "waybar"])
         be.run(["makoctl", "reload"])
         be.run(["labwc", "--reconfigure"])
+        if "wallpaper" in look:
+            wpm.restart()
     return look
 
 

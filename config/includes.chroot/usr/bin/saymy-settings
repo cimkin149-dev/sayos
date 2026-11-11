@@ -19,6 +19,8 @@ from gi.repository import GLib, Gtk, Gdk  # noqa: E402
 import saymy_i18n as i18n              # noqa: E402
 import saymy_settings_backend as be    # noqa: E402
 import saymy_looks as looks            # noqa: E402
+import saymy_sound as snd              # noqa: E402
+import saymy_wallpaper as wpm          # noqa: E402
 
 from saymy_ui import CSS, css_for, bg, debounced, label, row, switch, scale, page  # noqa: E402,F401
 
@@ -44,7 +46,7 @@ class Settings(Gtk.ApplicationWindow):
         self.stack.set_hexpand(True)
         self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
         self.panels = [("Network", self.network), ("Display", self.display), ("Sound", self.sound),
-                       ("Power", self.power), ("Appearance", self.appearance), ("Language", self.language),
+                       ("Power", self.power), ("Appearance", self.appearance), ("Wallpaper", self.wallpaper), ("Language", self.language),
                        ("Data & Money", self.data), ("Users", self.users), ("Updates", self.updates), ("About", self.about)]
         for name, build in self.panels:
             self.list.append(Gtk.Label(label=name, xalign=0))
@@ -184,7 +186,121 @@ class Settings(Gtk.ApplicationWindow):
         else:
             box.append(row("Volume", None, scale(min(vol, 100), lambda v: bg(lambda: be.volume_set(v), lambda r: None))))
             box.append(row("Mute", None, switch(muted, lambda on: bg(lambda: be.mute_set(on), lambda r: None))))
+        cfg = snd.load()
+        seg = Gtk.Box(spacing=6)
+        first = None
+        for name in snd.packs() + [snd.PACKS_OFF]:
+            tb = Gtk.ToggleButton(label=name)
+            if first is None:
+                first = tb
+            else:
+                tb.set_group(first)
+            tb.set_active(name == cfg["pack"])
+            tb.connect("toggled", lambda w, n=name: w.get_active() and snd.set_pack(n))
+            seg.append(tb)
+        head = label("Sound pack", "rt")
+        head.set_margin_top(14)
+        box.append(head)
+        box.append(row("Pack", "Savanna: kalimba and harp. Quiet: soft bells. Classic: plain beeps.", seg))
+        box.append(row("Event sounds volume", "How loud login, notification and power sounds are",
+                       scale(cfg["volume"], lambda v: snd.set_volume(v))))
+        box.append(label("Try a sound", "rt"))
+        tries = Gtk.FlowBox()
+        tries.set_selection_mode(Gtk.SelectionMode.NONE)
+        tries.set_max_children_per_line(6)
+        tries.set_column_spacing(6)
+        tries.set_row_spacing(6)
+        for text, ev in (("Login", "login"), ("Notification", "notify"), ("Power cut", "power-cut"), ("Power back", "power-back"),
+                         ("Battery low", "battery-low"), ("Update done", "update-done")):
+            b = Gtk.Button(label=text)
+            b.connect("clicked", lambda w, e=ev: snd.play(e, force=True))
+            tries.append(b)
+        box.append(tries)
+        box.append(label("Notifications are silent in the Study space, except safety alerts like power cuts and a critical battery.", "dim", wrap=True))
         return outer
+
+    # ---------------------------------------------------------- Wallpaper
+    def wallpaper(self):
+        outer, box = page("Wallpaper")
+        cfg = wpm.load()
+        self.wp_status = label("", "dim", wrap=True)
+
+        def apply(**kw):
+            def work():
+                try:
+                    wpm.set_wallpaper(**kw)
+                    return "Wallpaper changed."
+                except ValueError as exc:
+                    return str(exc)
+            bg(work, lambda msg: (self.wp_status.set_text(msg), self.rebuild("Wallpaper")))
+
+        modes = Gtk.Box(spacing=6)
+        first = None
+        for key, text in (("live", "Living Sky"), ("sky", "Sky photos"), ("image", "My picture")):
+            tb = Gtk.ToggleButton(label=text)
+            if first is None:
+                first = tb
+            else:
+                tb.set_group(first)
+            tb.set_active(key == cfg["mode"])
+            if key != "image":
+                tb.connect("toggled", lambda w, k=key: w.get_active() and k != cfg["mode"] and apply(mode=k))
+            else:
+                tb.connect("toggled", lambda w: w.get_active() and cfg["mode"] != "image" and self.pick_picture(apply))
+            modes.append(tb)
+        box.append(row("Wallpaper", "Living Sky is drawn by code and follows your real clock. No video, so it is light on battery.", modes))
+        title = label("Living Sky scenes", "rt")
+        title.set_margin_top(10)
+        box.append(title)
+        grid = Gtk.Box(spacing=12)
+        box.append(grid)
+        box.append(row("Animation", "Automatic pauses the movement on battery and shows a fresh frame every 30 seconds.",
+                       self.animate_choice(cfg, apply)))
+        pick = Gtk.Button(label="Choose a picture…")
+        pick.set_halign(Gtk.Align.START)
+        pick.connect("clicked", lambda b: self.pick_picture(apply))
+        box.append(pick)
+        box.append(label("When mains power drops, Living Sky lets evening fall and lights a lantern.", "dim", wrap=True))
+        box.append(self.wp_status)
+
+        def show(thumbs):
+            for scene, data in thumbs.items():
+                card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+                pic = Gtk.Picture.new_for_paintable(Gdk.Texture.new_from_bytes(GLib.Bytes.new(data)))
+                pic.set_size_request(190, 107)
+                card.append(pic)
+                use = Gtk.Button(label="In use" if cfg["mode"] == "live" and cfg["scene"] == scene else scene)
+                if cfg["mode"] == "live" and cfg["scene"] == scene:
+                    use.add_css_class("accent")
+                use.connect("clicked", lambda b, sc=scene: apply(mode="live", scene=sc))
+                card.append(use)
+                grid.append(card)
+        bg(wpm.thumbnails, show)
+        return outer
+
+    def animate_choice(self, cfg, apply):
+        seg = Gtk.Box(spacing=6)
+        first = None
+        for key, text in (("auto", "Automatic"), ("always", "Always"), ("never", "Never")):
+            tb = Gtk.ToggleButton(label=text)
+            if first is None:
+                first = tb
+            else:
+                tb.set_group(first)
+            tb.set_active(key == cfg["animate"])
+            tb.connect("toggled", lambda w, k=key: w.get_active() and k != cfg["animate"] and apply(animate=k))
+            seg.append(tb)
+        return seg
+
+    def pick_picture(self, apply):
+        dialog = Gtk.FileDialog()
+        def done(d, result):
+            try:
+                f = d.open_finish(result)
+            except GLib.Error:
+                return
+            apply(mode="image", image=f.get_path())
+        dialog.open(self, None, done)
 
     # ---------------------------------------------------------- Power
     def power(self):

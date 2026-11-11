@@ -4,7 +4,7 @@
 data wallet, installer branding, translation groundwork.
 
 **Stage 2: SayMy Shell and settings**
-Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine, SayMy Doctor, night light, screen timeout, Drop (nearby sharing, v0.1), Users and Updates panels, offline update bundles. Safe Updates with Undo, Looks (themes, panel, shareable files). Three GitHub ISO builds succeeded.
+Done so far: Settings app v0.1 (network, display, sound, power, appearance, language, data, about), first-run Welcome app, Spaces engine, SayMy Doctor, night light, screen timeout, Drop (nearby sharing, v0.1), Users and Updates panels, offline update bundles. Safe Updates with Undo, Looks (themes, panel, shareable files). Living Sky wallpapers and sound packs. Four GitHub ISO builds succeeded.
 Next: Users and Updates panels, night light, custom login screen, accent colour that follows
 the sky, first-run welcome, Modes (Study, Business, Home, Developer), screenshots-driven polish.
 
@@ -18,3 +18,5 @@ Payment adapter framework (MoMo and Airtel sandbox first, others by community), 
 **Stage 5: Hardening and release**
 Hardware testing on old and new laptops, Secure Boot, update system and mirrors, security review,
 trademark check, licence, public release, contributor guide.
+
+**Later ideas for wallpapers and sound:** a data-only scene format so the community can share scenes safely; weather-free moods (harvest, rainy season) driven by the calendar; per-Space sound packs; wallpapers that react to Drop transfers or Safe Update progress.

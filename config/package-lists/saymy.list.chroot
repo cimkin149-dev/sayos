@@ -57,6 +57,9 @@ qt6-wayland
 xdg-desktop-portal-wlr
 xdg-desktop-portal-gtk
 
+# --- Living Sky wallpapers (Cairo drawing; layer-shell for animation is installed by an optional hook)
+python3-cairo
+
 # --- Safe Updates (keeps old package versions so an update can be undone)
 dpkg-repack
 

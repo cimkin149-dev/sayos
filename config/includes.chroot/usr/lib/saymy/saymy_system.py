@@ -190,7 +190,10 @@ def _stream(cmd, on_line=None, runner=None):
             on_line(ln[10:] if ln.startswith("PROGRESS: ") else ln)
     if not runner:
         ok = p.wait() == 0
-    return ok and result.get("ok", True), result
+    done = ok and result.get("ok", True)
+    if done and result.get("stage") == "done" and not runner:
+        be.run(["saymy-sound", "play", "update-done"])
+    return done, result
 
 
 def safe_apply(on_line=None, bundle=None, runner=None):

@@ -264,6 +264,21 @@
     "light theme",
     "switch to light"
    ]
+  },
+  {
+   "id": "sound_off",
+   "patterns": [
+    "mute sounds",
+    "sounds off",
+    "turn off sounds"
+   ]
+  },
+  {
+   "id": "sound_on",
+   "patterns": [
+    "sounds on",
+    "turn on sounds"
+   ]
   }
  ]
 }

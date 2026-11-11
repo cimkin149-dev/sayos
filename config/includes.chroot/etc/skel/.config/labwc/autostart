@@ -1,6 +1,7 @@
 #!/bin/sh
 # SayMy session startup (labwc runs this once at login)
-saymy-sky &
+saymy-wallpaper &
+(sleep 3; saymy-sound play login) &
 mako &
 waybar &
 udiskie --tray --automount &

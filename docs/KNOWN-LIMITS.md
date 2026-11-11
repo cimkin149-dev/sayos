@@ -42,6 +42,11 @@ Written plainly so nothing surprises you.
 - **Looks**: colour swapping, panel edits and Look validation are tested (including hostile files) and the light theme was screenshotted on a virtual
   screen. Already-open GTK apps keep their old theme until restarted. Wallpapers are not part of a Look yet.
 
+- **Living Sky**: the renderer was drawn headless and inspected (all scenes, many hours, Grid Down), unit tested (continuity, sun and moon, adaptive
+  quality) and ported to the preview. The animated window path (GTK3 layer-shell) and the `swaybg` still-frame fallback have **not** run on a real
+  compositor yet. A frame costs about 32 ms at 960x540 on the build container; real hardware will differ, which is why quality adapts.
+- **Sound packs** were verified by measurement (pitch, level, clean edges), not by listening, and have not played through real speakers.
+
 ## Deliberately not in Stage 1
 - Voice input (Say Bar is typed for now). Luganda commands and translations need a native speaker.
 - Per-app data accounting (v0.1 counts total traffic per day).

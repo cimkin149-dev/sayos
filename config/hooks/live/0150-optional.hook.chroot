@@ -1,0 +1,5 @@
+#!/bin/sh
+# Optional packages: if the Debian mirror has them they are installed, if not the build carries on.
+# gtk-layer-shell lets Living Sky animate as a true desktop background; without it SayMy shows a fresh still frame each minute.
+apt-get install -y --no-install-recommends gir1.2-gtk-3.0 gir1.2-gtklayershell-0.1 python3-gi-cairo || echo "optional packages not available, using still-frame mode"
+exit 0

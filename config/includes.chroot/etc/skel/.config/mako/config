@@ -8,10 +8,12 @@ padding=14
 margin=12
 default-timeout=6000
 width=360
+on-notify=exec saymy-sound play notify
 
 [urgency=critical]
 border-color=#E0445B
 default-timeout=0
+on-notify=exec saymy-sound play critical
 
 [mode=dnd]
 invisible=1

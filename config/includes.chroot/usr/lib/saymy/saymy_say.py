@@ -240,6 +240,7 @@ SIMPLE = {
     "night_on": ["saymy-night", "on"], "night_off": ["saymy-night", "off"],
     "drop": ["saymy-drop"],
     "look_dark": ["saymy-look", "mode", "dark"], "look_light": ["saymy-look", "mode", "light"],
+    "sound_off": ["saymy-sound", "use", "Off"], "sound_on": ["saymy-sound", "use", "Savanna"],
     "language": ["saymy-language"],
     "install": ["saymy-install"],
 }
