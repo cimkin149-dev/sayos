@@ -31,6 +31,9 @@ echo "== python"
 python3 -m py_compile config/includes.chroot/usr/lib/saymy/*.py config/includes.chroot/usr/bin/saymy-language config/includes.chroot/usr/bin/saymy-settings config/includes.chroot/usr/bin/saymy-accent config/includes.chroot/usr/bin/saymy-welcome config/includes.chroot/usr/bin/saymy-space config/includes.chroot/usr/bin/saymy-doctor config/includes.chroot/usr/bin/saymy-night config/includes.chroot/usr/bin/saymy-idle config/includes.chroot/usr/bin/saymy-drop config/includes.chroot/usr/bin/saymy-look config/includes.chroot/usr/bin/saymy-sound config/includes.chroot/usr/bin/saymy-live config/includes.chroot/usr/bin/saymy-wallpaper config/includes.chroot/usr/bin/saymy-askpass config/includes.chroot/usr/lib/saymy/saymy-user-helper config/includes.chroot/usr/lib/saymy/saymy-update-helper || fail=1
 python3 tests/test_saymy.py || fail=1
 
+echo "== python, as on a bare CI machine (no GTK, no Cairo)"
+PYTHONPATH="$PWD/tests/shim" python3 tests/test_saymy.py >/dev/null 2>&1 && echo OK || { PYTHONPATH="$PWD/tests/shim" python3 tests/test_saymy.py 2>&1 | tail -25; echo "FAIL: tests break without GTK/Cairo"; fail=1; }
+
 echo "== required files"
 for f in auto/config config/package-lists/saymy.list.chroot \
          config/includes.chroot/usr/share/plymouth/themes/saymy/saymy.plymouth \

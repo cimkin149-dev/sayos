@@ -913,9 +913,9 @@ class Looks(unittest.TestCase):
         self.assertEqual(say.handle("switch to light", "en").exec, ["saymy-look", "mode", "light"])
 
     def test_windows_follow_the_theme(self):
-        import saymy_ui
+        import saymy_theme
         lk.apply_mode("light", home=self.home, reload=False)
-        css = saymy_ui.css_for("#D9650D")
+        css = saymy_theme.css_for("#D9650D")
         self.assertIn("#F7F1E6", css.upper())
         self.assertNotIn("#0C1A2A", css.upper())
 
